@@ -1,0 +1,1 @@
+ALTER TABLE transactions ADD COLUMN related_gift_id UUID REFERENCES gifts(id);

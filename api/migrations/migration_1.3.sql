@@ -1,0 +1,1 @@
+ALTER TABLE layers ADD COLUMN media_url VARCHAR(255);

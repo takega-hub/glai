@@ -1,0 +1,2 @@
+-- UUID generation is handled by built-in gen_random_uuid() function
+-- No additional extension needed

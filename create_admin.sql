@@ -1,0 +1,1 @@
+INSERT INTO users (email, password_hash, role, created_at, status) VALUES ('takega@yandex.ru', md5('opexoboe'), 'super_admin', NOW(), 'active');

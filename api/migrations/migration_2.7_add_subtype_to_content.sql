@@ -1,0 +1,1 @@
+ALTER TABLE content ADD COLUMN subtype VARCHAR(50);

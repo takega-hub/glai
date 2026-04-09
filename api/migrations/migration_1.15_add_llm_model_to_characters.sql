@@ -1,0 +1,1 @@
+ALTER TABLE characters ADD COLUMN llm_model VARCHAR(255) DEFAULT 'google/gemini-3-flash-preview';
