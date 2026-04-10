@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from pydantic import BaseModel
+import asyncpg
 import base64
 import httpx
 import json
@@ -9,13 +10,13 @@ from asyncpg.exceptions import UniqueViolationError
 
 import random
 
-from api.auth.security import get_current_user
+from api.auth.security import get_current_user, roles_required
 from api.database.connection import get_db
 
 router = APIRouter(
     prefix="/admin/characters",
     tags=["ai_scenarist"],
-    # dependencies=[Depends(get_current_admin)] # Add admin dependency later
+    dependencies=[Depends(roles_required(['admin', 'super_admin']))]
 )
 
 # --- Pydantic Models ---
@@ -708,8 +709,7 @@ async def trigger_llm_prompts_generation(
         # Fetch the newly generated prompts
         new_prompts = await connection.fetchrow("SELECT * FROM character_llm_prompts WHERE character_id = $1", character_id)
 
-    return {"message": f"LLM prompt generation started for character {character_id} with sexuality level {request.sexuality_level}.", "prompts": new_prompts}
-# 
+    return {"message": f"LLM prompt generation started for character {character_id} with sexuality level {request.sexuality_level}.", "prompts": new_prompts}# 
 #             break # Exit the while loop on success
 # 
 #         except UniqueViolationError as e:

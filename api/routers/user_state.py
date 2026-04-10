@@ -23,7 +23,6 @@ class UserCharacterState(BaseModel):
     trust_score: int
     current_layer: int
     layers_unlocked: list = []
-    content_unlocked: list = []
     tokens_balance: int
     conversation_history: Optional[list] = None
     last_message_date: Optional[datetime] = None
@@ -97,8 +96,6 @@ async def update_trust_score(update_data: TrustScoreUpdate, db=Depends(get_db)):
             user_state_dict['conversation_history'] = json.loads(user_state_dict['conversation_history'])
         if user_state_dict['layers_unlocked'] and isinstance(user_state_dict['layers_unlocked'], str):
             user_state_dict['layers_unlocked'] = json.loads(user_state_dict['layers_unlocked'])
-        if user_state_dict['content_unlocked'] and isinstance(user_state_dict['content_unlocked'], str):
-            user_state_dict['content_unlocked'] = json.loads(user_state_dict['content_unlocked'])
 
         # Add tokens_balance to the response
         user_info = await connection.fetchrow("SELECT tokens FROM users WHERE id = $1", update_data.user_id)

@@ -8,6 +8,7 @@ from api.auth.security import get_current_user
 from api.database.connection import get_db
 from api.services.ai_dialogue_v2 import AIDialogueEngine
 from api.services.comfy_service import ComfyService
+from api.tasks import _unlock_photo_in_db
 
 from pydantic import BaseModel
 from enum import Enum
@@ -184,64 +185,74 @@ async def send_gift(
                 expected_layer, current_user["user_id"], request.character_id
             )
 
+        # --- Unlock Content Logic ---
+        # Priority 1: Try to unlock a ready-made (has media_url) teaser photo.
         photo_to_unlock = await connection.fetchrow(
-            """WITH potential_content AS (
-                SELECT elem->>'id' as id, elem->>'media_url' as url, elem->>'prompt' as description
-                FROM layers l, LATERAL jsonb_array_elements(l.content_plan -> 'photo_prompts') elem
-                WHERE l.character_id = $1 AND l.layer_order <= $2 AND (elem->>'media_url') IS NOT NULL
-            ), unlocked AS (
-                SELECT jsonb_array_elements_text(ucs.content_unlocked)::uuid as unlocked_id
-                FROM user_character_state ucs
-                WHERE ucs.user_id = $3 AND ucs.character_id = $1
-            )
-            SELECT pc.id::uuid, pc.url, pc.description
-            FROM potential_content pc
-            LEFT JOIN unlocked u ON pc.id::uuid = u.unlocked_id
-            WHERE pc.id IS NOT NULL AND u.unlocked_id IS NULL
-            ORDER BY random() LIMIT 1;""",
-            request.character_id, expected_layer, current_user["user_id"]
+            """SELECT id, media_url as url, prompt as description FROM content 
+               WHERE character_id = $1 AND subtype = 'teaser' AND media_url IS NOT NULL
+               AND id NOT IN (SELECT content_id FROM user_unlocked_content WHERE user_id = $2 AND character_id = $1)
+               ORDER BY random() LIMIT 1""",
+            request.character_id, current_user["user_id"]
         )
 
         if photo_to_unlock and photo_to_unlock['url']:
-            print(f"--- Plan A: Found existing photo {photo_to_unlock['id']}. Unlocking and sending immediately. ---")
+            print(f"--- Plan A (Teaser): Found existing teaser photo {photo_to_unlock['id']}. Unlocking and sending. ---")
             unlocked_photo_url = photo_to_unlock['url']
-            # Add to unlocked list
-            unlocked_content_ids = json.loads(user_state.get("content_unlocked") or "[]")
-            unlocked_content_ids.append(str(photo_to_unlock['id']))
-            await connection.execute("UPDATE user_character_state SET content_unlocked = $1 WHERE user_id = $2 AND character_id = $3", json.dumps(unlocked_content_ids), current_user["user_id"], request.character_id)
+            # Unlock it for the user
+            await connection.execute(
+                "INSERT INTO user_unlocked_content (user_id, character_id, content_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
+                current_user["user_id"], request.character_id, photo_to_unlock['id']
+            )
         else:
-            prompt_to_generate = await connection.fetchrow(
+            # Priority 2: Try to unlock a ready-made (has media_url) layer photo.
+            photo_to_unlock = await connection.fetchrow(
                 """WITH potential_content AS (
-                    SELECT elem->>'id' as id, elem->>'prompt' as prompt
+                    SELECT elem->>'id' as id, elem->>'media_url' as url, elem->>'prompt' as description
                     FROM layers l, LATERAL jsonb_array_elements(l.content_plan -> 'photo_prompts') elem
-                    WHERE l.character_id = $1 AND l.layer_order <= $2 AND (elem->>'media_url') IS NULL
-                ), unlocked AS (
-                    SELECT jsonb_array_elements_text(ucs.content_unlocked)::uuid as unlocked_id
-                    FROM user_character_state ucs
-                    WHERE ucs.user_id = $3 AND ucs.character_id = $1
+                    WHERE l.character_id = $1 AND l.layer_order <= $2 AND (elem->>'media_url') IS NOT NULL
                 )
-                SELECT pc.id::uuid, pc.prompt
+                SELECT pc.id::uuid, pc.url, pc.description
                 FROM potential_content pc
-                LEFT JOIN unlocked u ON pc.id::uuid = u.unlocked_id
-                WHERE pc.id IS NOT NULL AND u.unlocked_id IS NULL
+                WHERE pc.id::uuid NOT IN (SELECT content_id FROM user_unlocked_content WHERE user_id = $3 AND character_id = $1)
                 ORDER BY random() LIMIT 1;""",
                 request.character_id, expected_layer, current_user["user_id"]
             )
-            if prompt_to_generate:
-                print(f"--- Plan B: Found prompt {prompt_to_generate['id']}. Generating synchronously. ---")
-                # This is now a blocking call
-                unlocked_photo_url = await _generate_and_unlock_photo(db, request.character_id, prompt_to_generate['id'], prompt_to_generate['prompt'])
+
+            if photo_to_unlock and photo_to_unlock['url']:
+                print(f"--- Plan A (Layer): Found existing layer photo {photo_to_unlock['id']}. Unlocking and sending immediately. ---")
+                unlocked_photo_url = photo_to_unlock['url']
+                # This function handles both updating the JSON and adding to user_unlocked_content
+                await _unlock_photo_in_db(db, photo_to_unlock['id'], request.character_id, current_user["user_id"])
             else:
-                print(f"--- Plan C: No content to unlock. On-demand generation is not yet supported in sync mode. ---")
-                unlocked_photo_url = None # Placeholder
+                # Priority 3: Find a layer photo prompt to generate on-demand.
+                prompt_to_generate = await connection.fetchrow(
+                    """WITH potential_content AS (
+                        SELECT elem->>'id' as id, elem->>'prompt' as prompt, elem->>'is_locked' as is_locked
+                        FROM layers l, LATERAL jsonb_array_elements(l.content_plan -> 'photo_prompts') elem
+                        WHERE l.character_id = $1 AND l.layer_order <= $2 AND (elem->>'media_url') IS NULL
+                    )
+                    SELECT pc.id::uuid, pc.prompt
+                    FROM potential_content pc
+                    WHERE pc.id IS NOT NULL AND (pc.is_locked IS NULL OR pc.is_locked = 'true')
+                    ORDER BY random() LIMIT 1;""",
+                    request.character_id, expected_layer
+                )
+                if prompt_to_generate:
+                    print(f"--- Plan B (Layer): Found prompt {prompt_to_generate['id']}. Generating synchronously. ---")
+                    unlocked_photo_url = await _generate_and_unlock_photo(db, request.character_id, prompt_to_generate['id'], prompt_to_generate['prompt'])
+                else:
+                    print(f"--- Plan C: No content to unlock. On-demand generation is not yet supported in sync mode. ---")
+                    unlocked_photo_url = None # Placeholder
 
         conversation_history = json.loads(user_state["conversation_history"] or "[]")
         gift_response_dict = await dialogue_engine.generate_gift_response(
             character_data=dict(character), user_name=user_name, gift_type=request.gift_type.value,
             trust_score=new_trust_score, conversation_history=conversation_history, unlocked_photo_url=unlocked_photo_url,
-            photo_prompt=photo_to_unlock['description'] if photo_to_unlock else None
+            photo_prompt=photo_to_unlock.get('description') if photo_to_unlock else None
         )
-        full_character_response = (gift_response_dict['response'] + ' ' + ' '.join(gift_response_dict['message_parts'])).strip()
+        response_text = gift_response_dict.get("response") or ""
+        extra_parts = gift_response_dict.get("message_parts") or []
+        full_character_response = (response_text + ' ' + ' '.join(extra_parts)).strip()
         await connection.execute("INSERT INTO messages (character_id, user_id, response, image_url, created_at) VALUES ($1, $2, $3, $4, NOW())", request.character_id, current_user["user_id"], full_character_response, unlocked_photo_url)
 
         return GiftResponse(new_trust_score=new_trust_score, new_token_balance=new_token_balance, message=f"You successfully sent a {request.gift_type.value} gift!", character_response=gift_response_dict.get("response", ""), character_response_parts=gift_response_dict.get("message_parts", []), unlocked_photo_url=unlocked_photo_url)
@@ -275,7 +286,7 @@ async def _generate_and_unlock_photo(db, character_id: uuid.UUID, photo_id: uuid
     async with aiofiles.open(file_path, 'wb') as f: await f.write(image_bytes)
     media_url = f"/{file_path}"
 
-    await _unlock_photo(db, photo_id, character_id)
+    await _unlock_photo_in_db(db, photo_id, character_id, current_user["user_id"])
     return media_url
 
 @router.get("/dialogue/history/{character_id}", response_model=HistoryResponse)

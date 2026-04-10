@@ -10,34 +10,52 @@ from api.services.image_generator import OpenRouterImageGenerator
 
 
 # --- Helper Function (used by unlock_and_generate_photo_task) ---
-async def _unlock_photo_in_db(db, photo_id: uuid.UUID, character_id: uuid.UUID):
+async def _unlock_photo_in_db(db, photo_id: uuid.UUID, character_id: uuid.UUID, user_id: uuid.UUID):
     """Marks a photo as unlocked in the database within a background task."""
-    print(f"--- [BG Task] Unlocking photo {photo_id} for character {character_id} ---")
+    print(f"--- [BG Task] Unlocking photo {photo_id} for character {character_id} user {user_id} ---")
     async with db.acquire() as connection:
         async with connection.transaction():
+            # First, try to unlock in content table (for teaser photos)
             updated_teaser = await connection.execute(
                 "UPDATE content SET is_locked = FALSE WHERE id = $1 AND subtype = 'teaser' RETURNING id",
                 photo_id
             )
-            if not updated_teaser or updated_teaser == "UPDATE 0":
-                all_layers = await connection.fetch("SELECT id, content_plan FROM layers WHERE character_id = $1", character_id)
-                for layer in all_layers:
-                    if not layer['content_plan']: continue
-                    content_plan = json.loads(layer['content_plan'])
-                    found_and_updated = False
-                    if 'photo_prompts' in content_plan:
-                        for item in content_plan['photo_prompts']:
-                            if item.get('id') == str(photo_id):
-                                item['is_locked'] = False
-                                found_and_updated = True
-                                break
-                    if found_and_updated:
-                        await connection.execute(
-                            "UPDATE layers SET content_plan = $1 WHERE id = $2",
-                            json.dumps(content_plan), layer['id']
-                        )
-                        print(f"--- [BG Task] Unlocked photo {photo_id} within layer {layer['id']} ---")
-                        return
+            
+            # If it was a teaser photo, also insert into user_unlocked_content
+            if updated_teaser and updated_teaser != "UPDATE 0":
+                await connection.execute(
+                    """INSERT INTO user_unlocked_content (user_id, character_id, content_id) 
+                       VALUES ($1, $2, $3) ON CONFLICT (user_id, character_id, content_id) DO NOTHING""",
+                    user_id, character_id, photo_id
+                )
+                print(f"--- [BG Task] Unlocked teaser photo {photo_id} and added to user_unlocked_content ---")
+                return
+            
+            # If not a teaser, try to unlock in layers content_plan
+            all_layers = await connection.fetch("SELECT id, content_plan FROM layers WHERE character_id = $1", character_id)
+            for layer in all_layers:
+                if not layer['content_plan']: continue
+                content_plan = json.loads(layer['content_plan'])
+                found_and_updated = False
+                if 'photo_prompts' in content_plan:
+                    for item in content_plan['photo_prompts']:
+                        if item.get('id') == str(photo_id):
+                            item['is_locked'] = False
+                            found_and_updated = True
+                            break
+                if found_and_updated:
+                    await connection.execute(
+                        "UPDATE layers SET content_plan = $1 WHERE id = $2",
+                        json.dumps(content_plan), layer['id']
+                    )
+                    # Also insert into user_unlocked_content for layer photos
+                    await connection.execute(
+                        """INSERT INTO user_unlocked_content (user_id, character_id, content_id) 
+                           VALUES ($1, $2, $3) ON CONFLICT (user_id, character_id, content_id) DO NOTHING""",
+                        user_id, character_id, photo_id
+                    )
+                    print(f"--- [BG Task] Unlocked layer photo {photo_id} and added to user_unlocked_content ---")
+                    return
 
 # --- Background Tasks ---
 
@@ -228,7 +246,7 @@ async def unlock_and_generate_photo_task(db, character_id: uuid.UUID, user_id: u
         media_url = f"/{file_path}"
         print(f"--- Saved generated photo to {media_url} ---")
 
-        await _unlock_photo_in_db(db, photo_id, character_id)
+        await _unlock_photo_in_db(db, photo_id, character_id, user_id)
 
         async with db.acquire() as connection:
             response_text = "Вот, как и обещала, небольшой сюрприз для тебя. 💕"

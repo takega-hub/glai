@@ -373,29 +373,27 @@ Respond with ONLY the UUID of the best matching photo. For example: `a1b2c3d4-e5
         async with self.db.acquire() as connection:
             content = await connection.fetchrow(
                 """WITH potential_content AS (
-                    SELECT elem->>'id' as id, elem->>'media_url' as url, elem->>'prompt' as description, COALESCE((elem->>'trust_required')::int, 0) as trust_required, 'photo' as type
+                    SELECT elem->>'id' as id, elem->>'media_url' as url, elem->>'prompt' as description, 
+                           COALESCE((elem->>'trust_required')::int, 0) as trust_required, 'photo' as type,
+                           elem->>'is_locked' as is_locked
                     FROM layers l, LATERAL jsonb_array_elements(l.content_plan -> 'photo_prompts') elem
                     WHERE l.character_id = $1
                     UNION ALL
-                    SELECT elem->>'id' as id, elem->>'media_url' as url, elem->>'prompt' as description, COALESCE((elem->>'trust_required')::int, 0) as trust_required, 'teaser' as type
+                    SELECT elem->>'id' as id, elem->>'media_url' as url, elem->>'prompt' as description, 
+                           COALESCE((elem->>'trust_required')::int, 0) as trust_required, 'teaser' as type,
+                           elem->>'is_locked' as is_locked
                     FROM layers l, LATERAL jsonb_array_elements(l.content_plan -> 'teaser_prompts') elem
                     WHERE l.character_id = $1
-                ), unlocked AS (
-                    SELECT jsonb_array_elements_text(ucs.content_unlocked)::uuid as unlocked_id
-                    FROM user_character_state ucs
-                    WHERE ucs.user_id = $3 AND ucs.character_id = $1
                 )
                 SELECT pc.id::uuid, pc.url, pc.description, pc.trust_required
                 FROM potential_content pc
-                LEFT JOIN unlocked u ON pc.id::uuid = u.unlocked_id
                 WHERE pc.id IS NOT NULL
                   AND pc.url IS NOT NULL
                   AND pc.trust_required <= $2
-                  AND u.unlocked_id IS NULL
+                  AND (pc.is_locked IS NULL OR pc.is_locked = 'true')
                 ORDER BY random()
                 LIMIT 1;""",
                 character_id, 
-                user_trust_score,
-                user_id
+                user_trust_score
             )
             return dict(content) if content else None

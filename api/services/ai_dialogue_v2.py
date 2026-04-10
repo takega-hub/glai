@@ -184,7 +184,7 @@ class AIDialogueEngine:
             "- Твой ответ должен быть только текстом, который ты бы написала в чате. Не используй звездочки (*) для описания действий.",
         ]
         
-        if unlocked_photo_url:
+        if unlocked_photo_url and photo_prompt:
             # Extract key visual elements from the photo prompt for strict adherence
             import re
             
@@ -293,7 +293,7 @@ class AIDialogueEngine:
                 conversation_history=conversation_history,
                 intimacy_analysis=intimacy_analysis,
                 unlocked_photo_url=unlocked_photo_url,
-                unlocked_photo_prompt=unlocked_photo_prompt
+                unlocked_photo_prompt=photo_prompt
             )
 
         gift_reactions = {
@@ -325,8 +325,8 @@ class AIDialogueEngine:
                 "**CRITICAL PHOTO TASK:** You are sending a photo. Your task is to describe it naturally.",
                 f"- **Photo Content:** The photo is described by this prompt: \"{photo_prompt}\"",
                 "- **Your Task:** Write a message that introduces this photo. Your description MUST be based on the VISUAL DETAILS in the prompt (like your pose, clothing, setting, and mood).",
-                "- **Rule:** Be descriptive but natural. Don't just list the prompt keywords.",
-                "- **FORBIDDEN:** Do not write `*sends photo*`. The photo is sent automatically."
+                "- **Rule:** Be descriptive but natural. Keep your response to 2-3 sentences. Don't just list the prompt keywords.",
+                "- **FORBIDDEN:** Do not write `*sends photo*` or `[фото отправлено]`. The photo is sent automatically."
             ])
         else:
             system_prompt_parts.append("- Твой ответ должен быть коротким и милым (1-3 предложения).")
@@ -341,10 +341,11 @@ class AIDialogueEngine:
                 model_id=character_data.get('llm_model', 'google/gemini-flash-preview'),
                 system_prompt=system_prompt,
                 temperature=0.85,
-                max_tokens=100
+                max_tokens=250
             )
             
-            message_parts = self._split_long_message(full_response.strip())
+            cleaned_response = full_response.strip().replace("[фото отправлено]", "")
+            message_parts = self._split_long_message(cleaned_response)
             
             return {
                 "response": message_parts[0],
@@ -425,6 +426,14 @@ class AIDialogueEngine:
         # --- PHOTO REQUEST LOGIC ---
         if is_photo_request:
             try:
+                # --- LOGGING FOR PHOTO REQUEST ---
+                print("--- HANDLING PHOTO REQUEST ---")
+                print(f"User Message: {user_message}")
+                print(f"Character ID: {character_data['id']}")
+                print(f"User Data: {user_data}")
+                print(f"User Trust Score: {user_trust_score}")
+                # --- END LOGGING ---
+
                 photo_decision = await self.photo_service.handle_photo_request(
                     user_message, character_data['id'], user_data.get('user_id'), 
                     user_trust_score, conversation_history, character_data

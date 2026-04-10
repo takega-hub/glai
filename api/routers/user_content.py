@@ -102,7 +102,7 @@ async def get_character_content(
             p.description,
             (uuc.content_id IS NULL) AS is_locked -- if it's not in user_unlocked_content, it's locked
         FROM all_photos p
-        LEFT JOIN user_unlocked_content uuc ON uuc.content_id = p.id AND uuc.user_id = $2
+        LEFT JOIN user_unlocked_content uuc ON uuc.content_id = p.id AND uuc.user_id = $2 AND uuc.character_id = $1
         ORDER BY p.layer_order ASC, p.created_at ASC;
     """
     
