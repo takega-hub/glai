@@ -54,8 +54,18 @@ async def generate_intimate_photo_task(db, character_id: uuid.UUID, user_id: uui
                 print(f"Character {character_id} not found.")
                 return
 
-            # Generate a powerful image prompt based on the analysis
-            prompt_details = await dialogue_engine.generate_on_demand_image_prompt(
+            # Get the base visual description of the character
+            base_description_text = ""
+            if character.get('visual_description'):
+                try:
+                    desc_data = json.loads(character['visual_description'])
+                    base_description_text = ", ".join(f"{k.replace('_', ' ')} is {v}" for k, v in desc_data.items())
+                except (json.JSONDecodeError, TypeError):
+                    if isinstance(character['visual_description'], str):
+                        base_description_text = character['visual_description']
+
+            # Generate a powerful, context-aware supplemental prompt from the user's request
+            supplemental_prompt_details = await dialogue_engine.generate_on_demand_image_prompt(
                 user_request=intimacy_analysis.get("user_intent", "a special photo"),
                 character_data=dict(character),
                 trust_score=100, # Assume high trust for this task
@@ -63,11 +73,15 @@ async def generate_intimate_photo_task(db, character_id: uuid.UUID, user_id: uui
                 conversation_history=[] # No history needed for this task
             )
             
-            if not prompt_details or not prompt_details.get("prompt"):
-                print("Failed to generate image prompt.")
+            if not supplemental_prompt_details or not supplemental_prompt_details.get("prompt"):
+                print("Failed to generate supplemental image prompt.")
                 return
 
-            final_prompt = prompt_details["prompt"]
+            supplemental_prompt = supplemental_prompt_details["prompt"]
+
+            # Combine the base description with the supplemental prompt
+            final_prompt = f"{base_description_text}, {supplemental_prompt}"
+            print(f"--- Constructed Final Prompt: {final_prompt} ---")
             
             # Get face image
             face_image_path = character['avatar_url'].lstrip('/')

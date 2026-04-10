@@ -57,6 +57,15 @@ const UserChat = () => {
 
           if (character_info) {
             console.log('Character info received:', character_info);
+            console.log('Available image fields:', {
+              avatar_url: character_info.avatar_url,
+              avatar: character_info.avatar,
+              image: character_info.image,
+              profile_image: character_info.profile_image,
+              photo: character_info.photo
+            });
+            const imageUrl = character_info.avatar_url || character_info.avatar || character_info.image || character_info.profile_image || character_info.photo;
+            console.log('Selected image URL:', imageUrl);
             setCharacter({ ...character_info, trust_score, current_layer });
           } else {
             console.warn('No character_info in history response');
@@ -108,6 +117,13 @@ const UserChat = () => {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  useEffect(() => {
+    if (character) {
+      console.log('Character state updated:', character);
+      console.log('Character image URL for rendering:', character.avatar_url || character.avatar);
+    }
+  }, [character]);
 
 
 
@@ -187,70 +203,66 @@ const UserChat = () => {
     if (!characterId) return;
 
     try {
-      console.log('Sending gift:', giftType, 'for character:', characterId);
       const response = await sendGift(characterId, giftType);
-      console.log('Gift response:', response.data);
       const { new_trust_score, new_token_balance, new_layer, character_response, character_response_parts, unlocked_photo_url } = response.data;
 
+      // --- Update State (Character & User) ---
       if (character) {
-        console.log('Updating trust from gift:', {
-          oldTrust: character.trust_score,
-          newTrust: new_trust_score,
-          oldLayer: character.current_layer,
-          newLayer: new_layer
-        });
-        setCharacter({ 
-          ...character, 
-          trust_score: new_trust_score,
-          current_layer: new_layer || character.current_layer
-        });
+        setCharacter({ ...character, trust_score: new_trust_score, current_layer: new_layer || character.current_layer });
       }
-
       const { user, token } = useAuthStore.getState();
       if (user && token) {
-        const updatedUser = { ...user, tokens: new_token_balance };
-        useAuthStore.getState().setAuth(token, updatedUser);
+        useAuthStore.getState().setAuth(token, { ...user, tokens: new_token_balance });
       }
 
-      const giftMessage: Message = {
-        id: Date.now().toString(),
-        text: `You sent a ${giftType} gift!`,
-        sender: 'system',
-        timestamp: new Date(),
-      };
-      setMessages(prev => [...prev, giftMessage]);
+      // --- Prepare the Queue of New Messages ---
+      const messageQueue: Omit<Message, 'id' | 'timestamp'>[] = [];
+
+      // 1. System message for the gift itself
+      messageQueue.push({ text: `You sent a ${giftType} gift!`, sender: 'system' });
+
+      // 2. First part of the character's text response
+      if (character_response && character_response.trim()) {
+        messageQueue.push({ text: character_response, sender: 'assistant' });
+      }
+
+      // 3. The photo message (if it exists)
+      if (unlocked_photo_url) {
+        messageQueue.push({ text: '', sender: 'assistant', imageUrl: unlocked_photo_url });
+      }
+
+      // 4. The rest of the character's text responses
+      if (character_response_parts && character_response_parts.length > 0) {
+        character_response_parts.forEach((part: string) => {
+          if (part && part.trim()) {
+            messageQueue.push({ text: part, sender: 'assistant' });
+          }
+        });
+      }
+
+      // --- Display Messages from the Queue Sequentially ---
       setIsGiftModalOpen(false);
+      for (const msgData of messageQueue) {
+        // Use a longer delay for photos, shorter for system messages
+        const typingTime = msgData.imageUrl ? 1200 : (msgData.sender === 'system' ? 50 : calculateTypingTime(msgData.text));
+        
+        if(msgData.sender === 'assistant') {
+          setIsTyping(true);
+          await new Promise(resolve => setTimeout(resolve, typingTime));
+          setIsTyping(false);
+        }
 
-      // --- [NEW] Display Character Reaction and Photo --- 
-      if (character_response || unlocked_photo_url) {
-        const full_response = [character_response, ...(character_response_parts || [])].join(" ").trim();
-
-        const reactionMessage: Message = {
-          id: `${Date.now()}-reaction`,
-          text: full_response,
-          sender: 'assistant',
+        const newMessage: Message = {
+          ...msgData,
+          id: `msg-${Date.now()}-${Math.random()}`,
           timestamp: new Date(),
-          imageUrl: unlocked_photo_url, // Attach the image URL here
         };
-
-        // Animate the single combined message
-        const typingTime = calculateTypingTime(full_response);
-        setIsTyping(true);
-        await new Promise(resolve => setTimeout(resolve, typingTime));
-        setIsTyping(false);
-
-        setMessages(prev => [...prev, reactionMessage]);
+        setMessages(prev => [...prev, newMessage]);
       }
 
     } catch (error: any) {
       console.error('Error sending gift:', error);
-      if (error.response?.status === 402) {
-        alert("You don't have enough tokens to send this gift.");
-      } else if (error.response?.status === 400) {
-        alert("Invalid gift type.");
-      } else {
-        alert("Failed to send gift. Please try again.");
-      }
+      alert(error.response?.data?.detail || "Failed to send gift. Please try again.");
     }
   };
 
@@ -283,15 +295,27 @@ const UserChat = () => {
             </button>
             
             <Link to={`/user/character/${characterId}`} className="flex-shrink-0">
-              <img
-                src={character.avatar_url || '/placeholder-avatar.png'}
-                alt={character.display_name}
-                className="w-10 h-10 sm:w-12 sm:h-12 rounded-full object-cover"
-                onError={(e) => {
-                  const target = e.target as HTMLImageElement;
-                  target.src = '/placeholder-avatar.png';
-                }}
-              />
+              {character.avatar_url || character.avatar ? (
+                <img
+                  src={character.avatar_url || character.avatar}
+                  alt={character.display_name}
+                  className="w-10 h-10 sm:w-12 sm:h-12 rounded-full object-cover"
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    console.log('Image failed to load, using fallback');
+                    target.style.display = 'none';
+                    const fallback = target.nextElementSibling as HTMLElement;
+                    if (fallback) fallback.style.display = 'flex';
+                  }}
+                />
+              ) : null}
+              <div 
+                className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 items-center justify-center ${(character.avatar_url || character.avatar) ? 'hidden' : 'flex'}`}
+              >
+                <span className="text-white font-bold text-lg">
+                  {character.display_name.charAt(0).toUpperCase()}
+                </span>
+              </div>
             </Link>
             
             <div className="flex-1 min-w-0">

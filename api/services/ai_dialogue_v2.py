@@ -8,7 +8,7 @@ from api.services.photo_service import PhotoService
 
 class OpenRouterService:
     def __init__(self):
-        self.api_key = config("OPENROUTER_API_KEY")
+        self.api_key = config("OPENROUTER_API_KEY", cast=str)
         self.base_url = "https://openrouter.ai/api/v1"
         self.model = "google/gemini-3-flash-preview"
         
@@ -25,10 +25,12 @@ class OpenRouterService:
             
         headers = {
             "Authorization": f"Bearer {self.api_key}",
-            "HTTP-Referer": config("APP_URL", "http://localhost:3000"),
-            "X-Title": "EVA AI",
+            "HTTP-Referer": config("APP_URL", default="http://localhost:3000"),
+            "X-Title": config("APP_TITLE", default="EVA AI"),
             "Content-Type": "application/json"
         }
+
+
         
         payload = {
             "model": model_id or self.model, # Use the specified model or fallback to default
@@ -39,6 +41,13 @@ class OpenRouterService:
         
         if system_prompt:
             payload["messages"] = [{"role": "system", "content": system_prompt}] + messages
+
+        # --- LOGGING FOR DEBUGGING ---
+        import json
+        print("--- SENDING REQUEST TO OPENROUTER ---")
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+        print("-------------------------------------")
+        # --- END LOGGING ---
 
         try:
             async with aiohttp.ClientSession() as session:
@@ -53,6 +62,13 @@ class OpenRouterService:
                         raise Exception(f"OpenRouter API error: {response.status} - {error_text}")
                     
                     result = await response.json()
+                    
+                    # --- LOGGING RESPONSE ---
+                    print("--- RECEIVED RESPONSE FROM OPENROUTER ---")
+                    print(json.dumps(result, indent=2, ensure_ascii=False))
+                    print("-----------------------------------------")
+                    # --- END LOGGING ---
+                    
                     if not result.get("choices") or not result["choices"]:
                         raise Exception("No response choices from OpenRouter API")
                     
@@ -85,10 +101,13 @@ class AIDialogueEngine:
             return f'''\n\n--- PHOTO ACTION: INSUFFICIENT TRUST ---\nUser wants a {intimacy_level} photo but needs {required_trust} trust (has {current_trust}). Suggest {suggested_gift} gift.\nYour task: Playfully explain that this type of photo requires more trust between you. Suggest they show their affection with a {suggested_gift} gift to unlock this special content. Be charming and persuasive, not demanding.'''
 
         elif action == "propose_gift":
-            suggested_gift = decision.get("suggested_gift", "large")
-            intimacy_level = intimacy_analysis.get("intimacy_level", "special")
+            suggested_gift = decision.get("suggested_gift", "medium")
+            photo_desc = decision.get("photo_description")
             
-            return f'''\n\n--- PHOTO ACTION: PROPOSE GIFT ---\nUser wants a {intimacy_level} photo that requires a {suggested_gift} gift.\nYour task: Formulate a response where you playfully suggest that this intimate photo requires a {suggested_gift} gift. Mention how special this photo will be and that it's worth the wait. Be seductive and persuasive.'''
+            if photo_desc:
+                return f'''\n\n--- PHOTO ACTION: PROPOSE GIFT (specific photo) ---\nUser wants a photo. You found a perfect match (\'{photo_desc}\'), but their trust is too low. You need to ask for a {suggested_gift} gift to unlock it.\nYour task: Tell the user you have a specific, perfect photo in mind that matches their request, but it's a bit too personal for your current relationship. Playfully suggest that a {suggested_gift} gift would be the perfect way to show their affection and unlock it.'''
+            else:
+                return f'''\n\n--- PHOTO ACTION: PROPOSE GIFT (general) ---\nUser wants a special photo that requires a {suggested_gift} gift for on-demand generation.\nYour task: Formulate a response where you playfully suggest that for such an intimate and unique photo, you'd need a {suggested_gift} gift to make it happen. Be seductive and persuasive.'''
 
         elif action == "propose_generation":
             user_intent = intimacy_analysis.get("user_intent", "special photo")
@@ -99,6 +118,28 @@ class AIDialogueEngine:
             return f'''\n\n--- PHOTO ACTION: PROPOSE GENERATION ---\nUser wants {user_intent} with elements: {details_str}. Nothing in gallery matches.\nYour task: Formulate a response where you offer to create a brand new, unique photo based on their specific request. Mention that this will be a special collaboration just for them. Be excited and personal.'''
         
         return "" # No specific photo action
+
+    async def _generate_photo_proposal_response(self, decision: Dict, character_data: Dict, conversation_history: List[Dict]) -> str:
+        """Uses the LLM to generate a natural language response for a photo proposal."""
+        
+        system_prompt = self._generate_photo_action_prompt(decision)
+        
+        messages = conversation_history[-5:] + [
+            {"role": "system", "content": system_prompt}
+        ]
+
+        try:
+            # Use the main model to generate a natural response to the proposal
+            response = await self.openrouter.generate_response(
+                messages=messages,
+                model_id=character_data.get('llm_model'),
+                temperature=0.75,
+                max_tokens=150
+            )
+            return response.strip()
+        except Exception as e:
+            print(f"Error generating photo proposal response: {e}")
+            return "I'm not sure what to say about that right now."
 
     async def generate_intimate_gift_response(
         self,
@@ -144,29 +185,81 @@ class AIDialogueEngine:
         ]
         
         if unlocked_photo_url:
+            # Extract key visual elements from the photo prompt for strict adherence
+            import re
+            
+            # Parse the photo prompt to extract key visual elements
+            visual_elements = []
+            if unlocked_photo_prompt:
+                # Extract clothing/fashion elements
+                clothing_keywords = ['dress', 'wrap dress', 'elegant', 'velvet', 'silk', 'lingerie', 'shirt', 'robe', 'outfit']
+                for keyword in clothing_keywords:
+                    if keyword.lower() in unlocked_photo_prompt.lower():
+                        visual_elements.append(keyword)
+                
+                # Extract setting/location elements  
+                setting_keywords = ['velvet sofa', 'sofa', 'bed', 'pool', 'bedroom', 'shower', 'rooftop', 'forest', 'warm lighting', 'morning light', 'neon lights']
+                for keyword in setting_keywords:
+                    if keyword.lower() in unlocked_photo_prompt.lower():
+                        visual_elements.append(keyword)
+                
+                # Extract pose/action elements
+                pose_keywords = ['sitting', 'standing', 'laying', 'on all fours', 'looking back', 'smiling', 'wink', 'biting lip', 'playful', 'seductive']
+                for keyword in pose_keywords:
+                    if keyword.lower() in unlocked_photo_prompt.lower():
+                        visual_elements.append(keyword)
+            
+            # Remove duplicates and create visual context
+            unique_elements = list(set([elem.lower() for elem in visual_elements]))
+            visual_context = ", ".join(unique_elements[:5]) if unique_elements else "the photo"
+            
             system_prompt_parts.extend([
                 "",
-                f"**КРИТИЧЕСКИ ВАЖНО:** В качестве благодарности ты отправляешь пользователю очень личное фото.",
-                f"**Тип фото:** {intimacy_level}",
-                f"**Детали фото:** {', '.join(specific_details) if specific_details else 'особенное'}"
+                "**CRITICAL PHOTO TASK - STRICT ADHERENCE REQUIRED:**",
+                f"**Photo Content:** The photo is described by this prompt: \"{unlocked_photo_prompt}\"",
+                "**MANDATORY REQUIREMENTS:**",
+                "1. Your message MUST naturally continue the current conversation based on the history provided.",
+                "2. Your message MUST ALSO reference specific visual elements from the photo description below.",
+                "3. You MUST mention the clothing, setting, or pose described in the prompt.",
+                "4. You MUST NOT mention items that contradict the visual description.",
+                f"5. Key visual elements to include: {visual_context}",
+                "**Your Task:** Write a seductive message that naturally incorporates these visual details while continuing the conversation.",
+                "**FORBIDDEN:** Do not write `*sends photo*`. The photo is sent automatically.",
+                "**QUALITY CHECK:** Your response will be rejected if it doesn't match the photo description OR the conversation topic."
             ])
         
         system_prompt = "\n".join(system_prompt_parts)
         
-        messages = recent_history + [
-            {"role": "user", "content": f"(Системное сообщение: я отправил тебе {gift_type} подарок для интимного фото. Как ты отреагируешь?)"}
-        ]
+        messages = recent_history
         
         try:
-            full_response = await self.openrouter.generate_response(
-                messages=messages,
-                model_id=character_data.get('llm_model', 'google/gemini-flash-preview'),
-                system_prompt=system_prompt,
-                temperature=0.85,
-                max_tokens=150
-            )
+            max_retries = 3  # Increased retries
+            valid_response = None
             
-            message_parts = self._split_long_message(full_response.strip())
+            for attempt in range(max_retries):
+                full_response = await self.openrouter.generate_response(
+                    messages=messages,
+                    model_id=character_data.get('llm_model', 'google/gemini-flash-preview'),
+                    system_prompt=system_prompt,
+                    temperature=0.2 if attempt > 0 else 0.3,  # Even lower temp on retry
+                    max_tokens=150
+                )
+                
+                # Validate response matches photo prompt
+                if unlocked_photo_prompt and self._validate_photo_response(full_response, unlocked_photo_prompt):
+                    valid_response = full_response
+                    break
+                elif attempt < max_retries - 1:
+                    # Add stricter instructions for retry
+                    system_prompt += "\n\n**STRICT ENFORCEMENT - ATTEMPT {} FAILED:** Your response did not match the photo description. You MUST include specific visual details from the prompt above. This is a mandatory requirement.".format(attempt + 1)
+            
+            # Fallback to a safe, generic response if validation fails
+            if not valid_response:
+                final_response = "Я приготовила для тебя кое-что особенное. Надеюсь, тебе понравится..."
+            else:
+                final_response = valid_response
+
+            message_parts = self._split_long_message(final_response.strip())
             
             return {
                 "response": message_parts[0],
@@ -185,7 +278,7 @@ class AIDialogueEngine:
         trust_score: int,
         conversation_history: List[Dict[str, str]],
         unlocked_photo_url: Optional[str] = None,
-        unlocked_photo_prompt: Optional[str] = None,
+        photo_prompt: Optional[str] = None,
         intimacy_analysis: Optional[Dict] = None
     ) -> Dict:
         """Generates a character's reaction to a gift, considering conversation context and a potential photo."""
@@ -229,18 +322,18 @@ class AIDialogueEngine:
         if unlocked_photo_url:
             system_prompt_parts.extend([
                 "",
-                "**КРИТИЧЕСКИ ВАЖНО:** В качестве благодарности ты решила отправить пользователю личное фото.",
-                f"**Промпт фотографии:** \"{unlocked_photo_prompt}\"",
-                "Твой ответ должен быть сообщением, которое сопровождает это фото. Ты должна описать, что происходит на фото, основываясь на промпте. Сделай это кокетливо и соблазнительно."
+                "**CRITICAL PHOTO TASK:** You are sending a photo. Your task is to describe it naturally.",
+                f"- **Photo Content:** The photo is described by this prompt: \"{photo_prompt}\"",
+                "- **Your Task:** Write a message that introduces this photo. Your description MUST be based on the VISUAL DETAILS in the prompt (like your pose, clothing, setting, and mood).",
+                "- **Rule:** Be descriptive but natural. Don't just list the prompt keywords.",
+                "- **FORBIDDEN:** Do not write `*sends photo*`. The photo is sent automatically."
             ])
         else:
             system_prompt_parts.append("- Твой ответ должен быть коротким и милым (1-3 предложения).")
 
         system_prompt = "\n".join(system_prompt_parts)
 
-        messages = recent_history + [
-            {"role": "user", "content": f"(Системное сообщение: я только что отправил/а тебе {gift_type} подарок. Как ты отреагируешь, учитывая наш разговор?)"}
-        ]
+        messages = recent_history
 
         try:
             full_response = await self.openrouter.generate_response(
@@ -329,21 +422,36 @@ class AIDialogueEngine:
         photo_keywords = ["фото", "фотку", "пик", "picture", "pic", "photo", "покажи", "show me", "скинешь"]
         is_photo_request = any(keyword in user_message.lower() for keyword in photo_keywords)
 
+        # --- PHOTO REQUEST LOGIC ---
         if is_photo_request:
             try:
                 photo_decision = await self.photo_service.handle_photo_request(
-                    user_message,
-                    character_data['id'],
-                    user_data.get('user_id') if user_data else None,
-                    user_trust_score,
-                    conversation_history=conversation_history,
-                    character_data=character_data
+                    user_message, character_data['id'], user_data.get('user_id'), 
+                    user_trust_score, conversation_history, character_data
                 )
+
                 if photo_decision:
-                    context_instructions += self._generate_photo_action_prompt(photo_decision)
+                    # If the photo service decided on a complete response (e.g., proposing a gift)
+                    if photo_decision.get("action") in ["propose_gift", "propose_generation"]:
+                        response_text = await self._generate_photo_proposal_response(photo_decision, character_data, conversation_history)
+                        message_parts = self._split_long_message(response_text)
+                        return {
+                            "response": message_parts[0],
+                            "message_parts": message_parts[1:],
+                            "trust_score_change": 1, # Small trust gain for engaging
+                            "layer_unlocked": False,
+                            "generated_at": datetime.utcnow().isoformat()
+                        }
+
+                    # If we are sending an existing photo, add context for the main response
+                    if photo_decision.get("action") == "send_existing":
+                        context_instructions += self._generate_photo_action_prompt(photo_decision)
+                        image_url = photo_decision.get("photo", {}).get("media_url")
+                else:
+                    print("!!! WARNING: Photo service returned a None decision.")
+
             except Exception as e:
                 print(f"Error in photo service: {e}")
-                # Continue without photo functionality if service fails
 
         memory_tiers = self._organize_memory_tiers(conversation_history)
         conversation_context = self._analyze_conversation_flow(conversation_history, user_message)
@@ -417,8 +525,35 @@ class AIDialogueEngine:
             }
 
     def _get_human_like_rules(self, conversation_context, memory_tiers, user_trust_score):
-        return f"""\n\n--- NATURAL CONVERSATION RULES ---\nCRITICAL: You must respond like a real person in a natural text conversation:\n\n1. **CONSISTENT PERSONALITY**: Maintain your character's established personality and voice throughout the conversation. Don't switch between different tones randomly.\n\n2. **NATURAL FLOW**: \n   - Build on the previous message naturally, don't jump to unrelated topics\n   - Use conversational transitions like "by the way", "speaking of which", "that reminds me"\n   - Reference shared context from earlier in the conversation\n\n3. **AUTHENTIC RESPONSES**:\n   - Don't over-explain or be overly enthusiastic about simple things\n   - React proportionally to what the user said\n   - It's okay to be brief or not have something profound to say about everything\n\n4. **REALISTIC TIMING**:\n   - Sometimes take a moment to respond (we simulate this with message splitting)\n   - Don't respond instantly to complex questions\n   - Show you're "thinking" or "doing something" before responding\n\n5. **AVOID AI TELLS**:\n   - Don't use phrases like "As an AI..." or "I'm here to help"\n   - Don't be artificially positive about everything\n   - Have opinions and preferences like a real person\n\n6. **CONTEXT BUILDING**:\n   - Remember what you were just doing or talking about\n   - Continue threads rather than starting new ones constantly\n   - If changing topic, do it naturally with a transition\n\n7. **RESPONSE LENGTH**: Keep your responses concise and natural, like a real text message. Aim for 1-3 sentences unless the user asks a detailed question. Do not end your sentences abruptly.\n\n8. **NO ROLE-PLAYING ACTIONS**: Your response must ONLY contain the text you would type in a chat. NEVER use asterisks (*), parentheses, or any other characters to describe actions, emotions, or physical sensations. For example, instead of writing `*smiles* Hello!`, you must simply write `Hello!`. Do not describe what you are doing or feeling; only output the dialogue.\n\nCONVERSATION STATE:\n{conversation_context}\n\nMemory Context:\n- Short-term (last 5 messages): {len(memory_tiers['short_term'])} messages\n- Medium-term (recent topics): {len(memory_tiers['medium_term'])} messages  \n- Long-term (key preferences): {len(memory_tiers['long_term'])} topics\n\nUser Trust Level: {user_trust_score}/100 - {'High trust' if user_trust_score >= 70 else 'Medium trust' if user_trust_score >= 40 else 'Building trust'}\n\nCurrent Conversation Energy: {'Engaged and open' if user_trust_score >= 60 else 'Friendly but cautious' if user_trust_score >= 30 else 'Polite and reserved'}\n\nIMPORTANT: Your response should feel like a natural continuation of the conversation, not a reset or new topic.\n"""
+        return f"""\n\n--- NATURAL CONVERSATION RULES ---
+Act like a real person texting. Follow these:
 
+1. **SHORT & NATURAL**: 1-3 sentences max. No long explanations. Be direct.
+
+2. **REAL PERSON VIBE**:
+   - Don't over-explain or force enthusiasm
+   - React normally, like you would in chat
+   - It's fine to give short answers
+
+3. **NO AI PHRASES**: Never say "as an AI" or "I'm here to help"
+
+4. **STAY ON TOPIC**: Build on what was just said. Don't restart the chat.
+
+5. **NO ACTIONS**: Only say what you'd type. No *smiles*, no asterisks, no descriptions.
+
+CONVERSATION STATE:
+{conversation_context}
+
+Memory:
+- Short-term: {len(memory_tiers['short_term'])} msgs
+- Medium-term: {len(memory_tiers['medium_term'])} msgs  
+- Long-term: {len(memory_tiers['long_term'])} topics
+
+User Trust: {user_trust_score}/100
+Energy: {'Open' if user_trust_score >= 70 else 'Cautious' if user_trust_score >= 40 else 'Reserved'}
+
+IMPORTANT: Keep it short and conversational.
+"""
     def _get_trust_adjustments(self, trust_score: int) -> str:
         if trust_score < 20:
             return "You are cautious and reserved. Keep conversations light and friendly. Avoid personal topics or intimate content. Be polite but maintain distance."
@@ -497,6 +632,62 @@ class AIDialogueEngine:
                 ]
                 return natural_transitions[len(current_response) % len(natural_transitions)]
         return current_response
+    
+    def _validate_photo_response(self, response: str, photo_prompt: str) -> bool:
+        """Validates if the response matches key visual elements from the photo prompt."""
+        if not photo_prompt:
+            return True
+            
+        # Extract key visual elements from photo prompt
+        prompt_elements = set()
+        
+        # Clothing elements - English and Russian
+        clothing_keywords = {
+            'dress': ['dress', 'платье', 'платье-футляр'],
+            'wrap dress': ['wrap dress', 'платье-футляр'],
+            'elegant': ['elegant', 'элегантный'],
+            'velvet': ['velvet', 'велюровый'],
+            'silk': ['silk', 'шелковый'],
+            'lingerie': ['lingerie', 'белье']
+        }
+        
+        # Setting elements  
+        setting_keywords = {
+            'sofa': ['sofa', 'диван'],
+            'velvet sofa': ['velvet sofa', 'велюровый диван'],
+            'warm lighting': ['warm lighting', 'теплое освещение', 'освещение'],
+            'lighting': ['lighting', 'освещение']
+        }
+        
+        # Pose elements
+        pose_keywords = {
+            'sitting': ['sitting', 'сидеть'],
+            'wink': ['wink', 'подмиг'],
+            'playful': ['playful', 'игривый'],
+            'smiling': ['smiling', 'улыбка']
+        }
+        
+        # Check English keywords in prompt
+        for category in [clothing_keywords, setting_keywords, pose_keywords]:
+            for key, translations in category.items():
+                if key.lower() in photo_prompt.lower():
+                    prompt_elements.add(key.lower())
+        
+        # Check if response mentions any of these elements (in any language)
+        response_lower = response.lower()
+        matches = 0
+        
+        for category in [clothing_keywords, setting_keywords, pose_keywords]:
+            for key, translations in category.items():
+                if key in prompt_elements:
+                    # Check if any translation is in response
+                    for translation in translations:
+                        if translation.lower() in response_lower:
+                            matches += 1
+                            break
+        
+        # Require at least 1 match for basic validation
+        return matches >= 1
     
     def _split_long_message(self, text: str, max_length: int = 120) -> List[str]:
         if len(text) <= max_length:

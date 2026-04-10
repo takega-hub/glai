@@ -27,6 +27,10 @@ export interface Character {
   name: string;
   display_name: string;
   avatar_url: string;
+  avatar?: string;
+  image?: string;
+  profile_image?: string;
+  photo?: string;
   personality_type: string;
   archetype?: string;
   biography?: string;

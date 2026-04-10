@@ -97,7 +97,7 @@ Respond with ONLY a JSON object:
             
             analysis_result = await self.ai_service.generate_response(
                 messages=messages,
-                model_id="google/gemini-flash-1.5",
+                model_id="deepseek/deepseek-chat", # Using consistent model
                 temperature=0.3,
                 max_tokens=200
             )
@@ -132,9 +132,14 @@ Respond with ONLY a JSON object:
         # Determine trust requirement and gift suggestion
         level_info = self.intimacy_levels.get(detected_level, {"min_trust": 0, "gift_type": None})
         
+        # For casual requests, explicitly mark them as general for the handler
+        user_intent = f"User is asking for a {detected_level} photo"
+        if detected_level == "casual":
+            user_intent = f"A general, casual photo request"
+
         return {
             "intimacy_level": detected_level,
-            "user_intent": f"User is asking for a {detected_level} photo",
+            "user_intent": user_intent,
             "specific_details": ["general photo request"],
             "trust_required": level_info["min_trust"],
             "gift_suggested": level_info["gift_type"] or "none",
@@ -170,7 +175,6 @@ Respond with ONLY a JSON object:
                 WHERE l.character_id = $1 
                   AND l.layer_order <= $2 
                   AND (elem->>'media_url') IS NOT NULL
-                  AND (elem->>'is_locked')::boolean = false
                   AND (elem->>'id')::uuid NOT IN (
                       SELECT content_id FROM user_unlocked_content 
                       WHERE user_id = $3 AND character_id = $1
@@ -224,29 +228,60 @@ Respond with ONLY a JSON object:
                                  user_id: uuid.UUID, user_trust_score: int, 
                                  conversation_history: List[Dict] = None,
                                  character_data: Dict = None) -> Dict:
-        """Main method to handle photo requests with AI analysis."""
-        
-        # Analyze the user's intent using AI
+        """Main method to handle photo requests with new, smarter logic."""
+        # 1. Analyze the user's request to see if it's specific or generic
         intimacy_analysis = await self.analyze_photo_intent_with_ai(
             user_message, 
             conversation_history or [], 
             character_data or {}
         )
         
-        print(f"Photo request analysis: {intimacy_analysis}")
-        
-        # Find matching photo or suggest appropriate action
-        result = await self.find_matching_photo(
-            character_id, user_id, intimacy_analysis, user_trust_score
-        )
-        
-        # Enhance the result with analysis details
-        result["intimacy_analysis"] = intimacy_analysis
-        result["user_message"] = user_message
-        result["timestamp"] = datetime.utcnow().isoformat()
-        
-        return result
+        is_generic_request = intimacy_analysis.get('intimacy_level') == 'casual' and "general" in intimacy_analysis.get('user_intent', '')
 
+        content_match = None
+
+        # 2. Handle the request based on its type
+        if is_generic_request:
+            # For generic requests, find a random piece of content the user can see now
+            print("--- Generic photo request: Finding random unlockable content. ---")
+            content_match = await self.find_random_unlockable_content(character_id, user_id, user_trust_score)
+            if content_match:
+                    response = {
+                        "action": "send_existing",
+                        "photo": content_match,
+                        "reason": f"Found a random unlockable photo for you: {content_match['description']}"
+                    }
+                    print(f"[DEBUG] handle_photo_request returning for generic request: {response}")
+                    return response
+        else:
+            # For specific requests, use AI to find the best match
+            print("--- Specific photo request: Using AI to find the best match. ---")
+            content_match = await self.find_best_matching_photo_with_ai(user_message, character_id, user_id)
+
+        # 3. If a specific match was found, check trust and propose gift if needed
+        if content_match and isinstance(content_match, dict):
+            required_trust = content_match.get("trust_required") or 50
+            if user_trust_score >= required_trust:
+                return {
+                    "action": "send_existing",
+                    "photo": content_match,
+                    "reason": f"Found a perfect match: {content_match['description']}"
+                }
+            else:
+                return {
+                    "action": "propose_gift",
+                    "reason": "Found a perfect photo, but trust is too low.",
+                    "suggested_gift": "medium",
+                    "required_trust": required_trust,
+                    "photo_description": content_match['description']
+                }
+
+        # 4. Plan C: If no content is found at all, propose generation
+        print("--- No suitable content found. Using fallback message. ---")
+        return {
+            "action": "show_message",
+            "message": "Новых фото нет."
+        }
     def get_intimacy_description(self, level: str) -> str:
         """Get human-readable description of intimacy level."""
         descriptions = {
@@ -257,3 +292,110 @@ Respond with ONLY a JSON object:
             "explicit": "откровенное фото"
         }
         return descriptions.get(level, "фото")
+
+    async def find_best_matching_photo_with_ai(self, user_request: str, character_id: uuid.UUID, user_id: uuid.UUID) -> Optional[Dict]:
+        """Uses AI to find the best matching photo from the character's gallery."""
+        async with self.db.acquire() as connection:
+            # Fetch all available, locked photos for the character
+            available_photos = await connection.fetch("""
+                SELECT (elem->>'id')::uuid as id, 
+                       elem->>'prompt' as description,
+                       elem->>'intimacy_level' as intimacy_level,
+                       (elem->>'trust_required')::int as trust_required
+                FROM layers l, 
+                     LATERAL jsonb_array_elements(l.content_plan -> 'photo_prompts') elem 
+                WHERE l.character_id = $1
+                  AND (elem->>'media_url') IS NOT NULL
+                  AND (elem->>'id')::uuid NOT IN (
+                      SELECT content_id FROM user_unlocked_content 
+                      WHERE user_id = $2 AND character_id = $1
+                  )
+            """, character_id, user_id)
+
+        if not available_photos:
+            return None
+
+        # Prepare the list of photos for the AI to rank
+        photo_options = "\n".join([
+            f"- ID: {p['id']}\n  Prompt: {p['description']}\n  Intimacy: {p['intimacy_level']}\n"
+            for p in available_photos
+        ])
+
+        ranking_prompt = f"""# PHOTO MATCHING TASK
+
+## User's Request
+"{user_request}"
+
+## Available Photos
+{photo_options}
+
+## YOUR TASK
+Analyze the user's request and choose the ONE photo from the list that is the BEST possible match for the user's intent and the context. Consider the photo's prompt and intimacy level.
+
+## OUTPUT FORMAT
+Respond with ONLY the UUID of the best matching photo. For example: `a1b2c3d4-e5f6-g7h8-i9j0-k1l2m3n4o5p6`"""
+
+        try:
+            messages = [
+                {"role": "system", "content": ranking_prompt},
+                {"role": "user", "content": f"Which photo is the best match for this request: '{user_request}'?"}
+            ]
+            
+            response_text = await self.ai_service.generate_response(
+                messages=messages,
+                model_id="deepseek/deepseek-chat",
+                temperature=0.1, # Low temperature for factual selection
+                max_tokens=150 # Increased tokens in case of conversational response
+            )
+
+            # Use regex to find a UUID in the response text, making it robust
+            import re
+            uuid_match = re.search(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', response_text, re.IGNORECASE)
+            
+            if not uuid_match:
+                raise ValueError("No UUID found in AI response")
+
+            best_photo_id = uuid.UUID(uuid_match.group(0))
+
+            # Find the full photo data from the original list
+            for photo in available_photos:
+                if photo['id'] == best_photo_id:
+                    return dict(photo)
+            
+            return None # Should not happen if UUID is from the list
+
+        except Exception as e:
+            print(f"AI photo matching failed: {e}, returning first available photo as fallback.")
+            return dict(available_photos[0]) if available_photos else None
+
+    async def find_random_unlockable_content(self, character_id: uuid.UUID, user_id: uuid.UUID, user_trust_score: int) -> Optional[Dict]:
+        """Finds a random, not-yet-unlocked photo or teaser that the user has enough trust for."""
+        async with self.db.acquire() as connection:
+            content = await connection.fetchrow(
+                """WITH potential_content AS (
+                    SELECT elem->>'id' as id, elem->>'media_url' as url, elem->>'prompt' as description, COALESCE((elem->>'trust_required')::int, 0) as trust_required, 'photo' as type
+                    FROM layers l, LATERAL jsonb_array_elements(l.content_plan -> 'photo_prompts') elem
+                    WHERE l.character_id = $1
+                    UNION ALL
+                    SELECT elem->>'id' as id, elem->>'media_url' as url, elem->>'prompt' as description, COALESCE((elem->>'trust_required')::int, 0) as trust_required, 'teaser' as type
+                    FROM layers l, LATERAL jsonb_array_elements(l.content_plan -> 'teaser_prompts') elem
+                    WHERE l.character_id = $1
+                ), unlocked AS (
+                    SELECT jsonb_array_elements_text(ucs.content_unlocked)::uuid as unlocked_id
+                    FROM user_character_state ucs
+                    WHERE ucs.user_id = $3 AND ucs.character_id = $1
+                )
+                SELECT pc.id::uuid, pc.url, pc.description, pc.trust_required
+                FROM potential_content pc
+                LEFT JOIN unlocked u ON pc.id::uuid = u.unlocked_id
+                WHERE pc.id IS NOT NULL
+                  AND pc.url IS NOT NULL
+                  AND pc.trust_required <= $2
+                  AND u.unlocked_id IS NULL
+                ORDER BY random()
+                LIMIT 1;""",
+                character_id, 
+                user_trust_score,
+                user_id
+            )
+            return dict(content) if content else None

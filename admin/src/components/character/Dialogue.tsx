@@ -86,22 +86,58 @@ const Dialogue: React.FC<DialogueProps> = ({ data }) => {
     if (!lastGiftProposal) return;
 
     setIsLoading(true);
-    const response = await fetch('/api/monetization/send-gift', {
+    setLastGiftProposal(null); // Clear proposal UI immediately
+
+    // Helper to add messages with a delay for typing animation
+    const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
+
+    const response = await fetch('/api/dialogue/send-gift/', { // CORRECT ENDPOINT
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,
       },
       body: JSON.stringify({
-        recipient_id: data.character.id,
-        gift_id: 1, // Assuming gift_id 1 is 'large gift'. This should be dynamic.
-        user_prompt: lastGiftProposal.user_prompt
+        character_id: data.character.id,
+        gift_type: lastGiftProposal.required_gift, // Use the gift type from the proposal
+        intimacy_analysis: { user_intent: lastGiftProposal.user_prompt } // Pass analysis
       }),
     });
 
     if (response.ok) {
-      alert('Подарок отправлен! Персонаж готовит для вас фото...');
-      setLastGiftProposal(null); // Clear the proposal
+      const giftResponse = await response.json();
+      
+      // 1. Add the character's first response part
+      setMessages(prev => [...prev, {
+        id: Date.now(),
+        message: `(You sent a ${giftResponse.message.split(' ')[3]} gift!)`,
+        response: giftResponse.character_response,
+        created_at: new Date().toISOString(),
+      }]);
+      
+      await sleep(500); // Wait for first message to appear
+
+      // 2. Add the photo if it exists
+      if (giftResponse.unlocked_photo_url) {
+        setMessages(prev => [...prev, {
+          id: Date.now() + 1,
+          message: "", // No user message for the photo part
+          response: giftResponse.unlocked_photo_url, // We'll render this as an image
+          created_at: new Date().toISOString(),
+        }]);
+      }
+
+      // 3. Add the rest of the message parts with a typing delay
+      for (const part of giftResponse.character_response_parts) {
+        await sleep(1000); // Simulate typing
+        setMessages(prev => [...prev, {
+          id: Date.now() + Math.random(),
+          message: "",
+          response: part,
+          created_at: new Date().toISOString(),
+        }]);
+      }
+
     } else {
       const error = await response.json();
       alert(`Ошибка: ${error.detail}`);
@@ -132,7 +168,11 @@ const Dialogue: React.FC<DialogueProps> = ({ data }) => {
             {/* Character Response - aligned to the left */}
             <div className="flex justify-start">
               <div className="max-w-xs lg:max-w-md px-4 py-2 rounded-lg bg-gray-200 text-gray-800">
-                <p className="text-sm">{msg.response}</p>
+                {msg.response.startsWith('/uploads/') ? (
+                  <img src={`/api${msg.response}`} alt="Unlocked content" className="rounded-lg" />
+                ) : (
+                  <p className="text-sm">{msg.response}</p>
+                )}
                 <p className="text-xs text-gray-500 mt-1 text-left">
                   {new Date(msg.created_at).toLocaleTimeString()}
                 </p>
