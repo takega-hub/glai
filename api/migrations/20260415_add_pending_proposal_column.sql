@@ -1,0 +1,1 @@
+ALTER TABLE user_character_state ADD COLUMN pending_photo_proposal JSONB;

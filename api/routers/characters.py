@@ -14,6 +14,8 @@ import base64
 from api.routers import ai_scenarist
 from api.routers.enhancement import _enhance_visual_description_with_scenarist
 from api.services.image_generator import OpenRouterImageGenerator
+from api.services.image_optimizer import ImageOptimizerService
+from datetime import datetime
 from api.auth.security import get_current_user
 
 
@@ -831,6 +833,51 @@ async def get_character_reference_photos(character_id: uuid.UUID, db=Depends(get
     print(f"--------------------------------------")
     
     return {"reference_photos": reference_photos}
+
+
+@router.post("/reference_photos/{character_id}/upload", summary="Upload a new reference photo")
+async def upload_reference_photo(
+    character_id: uuid.UUID,
+    file: UploadFile = File(...),
+    db=Depends(get_db)
+):
+    """Uploads a new reference photo for an existing character."""
+    # 1. Check if character exists
+    character = await db.fetchrow("SELECT id FROM characters WHERE id = $1", character_id)
+    if not character:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Character not found")
+
+    # 2. Handle the file upload and optimization
+    upload_dir = os.path.join(UPLOAD_DIRECTORY, str(character_id), "reference_photos")
+    os.makedirs(upload_dir, exist_ok=True)
+
+    file_content = await file.read()
+    
+    # Always optimize uploaded reference photos
+    optimizer = ImageOptimizerService()
+    optimized_content = optimizer.optimize_image(file_content)
+    
+    # Save the optimized file with a unique name
+    new_photo_id = uuid.uuid4()
+    filename = f"ref_{new_photo_id}.jpg"
+    file_path = os.path.join(upload_dir, filename)
+
+    async with aiofiles.open(file_path, 'wb') as out_file:
+        await out_file.write(optimized_content)
+
+    # 3. Create a new entry in the reference_photos table
+    db_file_path = f"/uploads/{character_id}/reference_photos/{filename}"
+    description = f"Uploaded reference photo on {datetime.utcnow().isoformat()}"
+    
+    await db.execute(
+        """INSERT INTO reference_photos (character_id, description, prompt, media_url, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, NOW(), NOW()) RETURNING id""",
+        character_id, description, "User-uploaded reference photo.", db_file_path
+    )
+    
+    return {"message": "Reference photo uploaded successfully.", "media_url": db_file_path}
+
+
 
 @router.get("/{character_id}/teaser-content", summary="Get teaser content for a character")
 async def get_character_teaser_content(character_id: uuid.UUID, db=Depends(get_db)):

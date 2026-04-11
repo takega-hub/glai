@@ -54,6 +54,8 @@ export interface Message {
   sender: 'user' | 'character' | 'system' | 'assistant';
   timestamp: Date;
   imageUrl?: string;
+  action?: 'awaiting_gift_for_generation';
+  photo_proposal_details?: any;
   giftProposal?: any;
 }
 

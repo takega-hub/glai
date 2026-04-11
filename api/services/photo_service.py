@@ -155,13 +155,25 @@ Respond with ONLY a JSON object:
         
         # If user doesn't have enough trust for the requested intimacy level
         if user_trust_score < required_trust:
-            return {
-                "action": "insufficient_trust",
-                "required_trust": required_trust,
-                "current_trust": user_trust_score,
-                "suggested_gift": intimacy_analysis.get("gift_suggested", "small"),
-                "reason": f"Need {required_trust} trust, have {user_trust_score}"
-            }
+            # First, try to find a photo at a lower, acceptable intimacy level
+            print(f"--- Trust too low ({user_trust_score} < {required_trust}). Finding alternative. ---")
+            alternative_photo = await self.find_alternative_photo(character_id, user_id, user_trust_score)
+            if alternative_photo:
+                return {
+                    "action": "propose_alternative",
+                    "photo": alternative_photo,
+                    "reason": f"Trust too low for {intimacy_analysis.get('intimacy_level')}, offering {alternative_photo.get('intimacy_level', 'casual')} instead.",
+                    "requested_level": intimacy_analysis.get('intimacy_level', 'unknown')
+                }
+            else:
+                # If no alternative is found, then propose a gift
+                return {
+                    "action": "insufficient_trust",
+                    "required_trust": required_trust,
+                    "current_trust": user_trust_score,
+                    "suggested_gift": intimacy_analysis.get("gift_suggested", "small"),
+                    "reason": f"Need {required_trust} trust, have {user_trust_score}, and no alternatives found."
+                }
         
         async with self.db.acquire() as connection:
             # First, try to find an existing photo that matches the intimacy level
@@ -224,6 +236,43 @@ Respond with ONLY a JSON object:
                     "intimacy_analysis": intimacy_analysis
                 }
 
+    async def find_alternative_photo(self, character_id: uuid.UUID, user_id: uuid.UUID, user_trust_score: int) -> Optional[Dict]:
+        """Finds a random, available photo that the user has sufficient trust to unlock."""
+        # This function is a simplified version of find_random_unlockable_content
+        # It prioritizes finding *any* content the user can see right now.
+        async with self.db.acquire() as connection:
+            # Search teasers first
+            teaser = await connection.fetchrow("""
+                SELECT id, prompt as description, media_url, 'teaser' as type, 0 as trust_required
+                FROM content
+                WHERE character_id = $1 AND subtype = 'teaser' AND media_url IS NOT NULL
+                AND id NOT IN (SELECT content_id FROM user_unlocked_content WHERE user_id = $2 AND character_id = $1)
+                ORDER BY random() LIMIT 1
+            """, character_id, user_id)
+
+            if teaser:
+                return dict(teaser)
+
+            # Then search layers
+            layer_photo = await connection.fetchrow("""
+                WITH potential_content AS (
+                    SELECT elem->>'id' as id, elem->>'media_url' as url, elem->>'prompt' as description, 
+                           (elem->>'trust_required')::int as trust_required, 'photo' as type
+                    FROM layers l, LATERAL jsonb_array_elements(l.content_plan -> 'photo_prompts') elem
+                    WHERE l.character_id = $1 AND (elem->>'media_url') IS NOT NULL
+                )
+                SELECT pc.id::uuid, pc.url, pc.description, pc.trust_required, pc.type
+                FROM potential_content pc
+                WHERE pc.trust_required <= $2
+                  AND pc.id::uuid NOT IN (SELECT content_id FROM user_unlocked_content WHERE user_id = $3 AND character_id = $1)
+                ORDER BY random() LIMIT 1;
+            """, character_id, user_trust_score, user_id)
+
+            if layer_photo:
+                return dict(layer_photo)
+
+            return None
+
     async def handle_photo_request(self, user_message: str, character_id: uuid.UUID, 
                                  user_id: uuid.UUID, user_trust_score: int, 
                                  conversation_history: List[Dict] = None,
@@ -246,13 +295,22 @@ Respond with ONLY a JSON object:
             print("--- Generic photo request: Finding random unlockable content. ---")
             content_match = await self.find_random_unlockable_content(character_id, user_id, user_trust_score)
             if content_match:
-                    response = {
-                        "action": "send_existing",
-                        "photo": content_match,
-                        "reason": f"Found a random unlockable photo for you: {content_match['description']}"
-                    }
-                    print(f"[DEBUG] handle_photo_request returning for generic request: {response}")
-                    return response
+                response = {
+                    "action": "send_existing",
+                    "photo": content_match,
+                    "reason": f"Found a random unlockable photo for you: {content_match['description']}"
+                }
+                print(f"[DEBUG] handle_photo_request returning for generic request: {response}")
+                return response
+            else:
+                # If no random content is found, propose generating a new one for a gift
+                print("--- No random content found. Proposing gift for new generation. ---")
+                return {
+                    "action": "propose_gift",
+                    "reason": "No random photo available, proposing to generate a new one.",
+                    "suggested_gift": "large",
+                    "intimacy_analysis": intimacy_analysis
+                }
         else:
             # For specific requests, use AI to find the best match
             print("--- Specific photo request: Using AI to find the best match. ---")

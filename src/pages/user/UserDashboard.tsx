@@ -224,7 +224,7 @@ const UserDashboard = () => {
                                                   <span
                                                       className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-500/20 text-purple-300 border border-purple-400/30">
                                                       <Heart className="w-3 h-3 mr-1"/>
-                                                      {Math.round(character.trust_score / 10)}% trust
+                                                      {Math.min(Math.round(character.trust_score / 10), 100)}% trust
                                                   </span>
                                                   <span
                                                       className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-500/20 text-blue-300 border border-blue-400/30">

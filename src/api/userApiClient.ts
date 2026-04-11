@@ -51,6 +51,10 @@ export const sendGift = (characterId: string, giftType: string) => {
     gift_type: giftType
   });
 };
+
+export const generatePhotoFromProposal = (characterId: string, intimacyAnalysis: any) => {
+    return apiClient.post(`/dialogue/generate-photo-from-proposal`, { character_id: characterId, intimacy_analysis: intimacyAnalysis });
+};
 export const register = (userInfo: any) => apiClient.post('/auth/register', userInfo);
 export const loginAsGuest = () => apiClient.post('/auth/guest');
 

@@ -1,7 +1,7 @@
 import uuid
 import json
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from typing import Dict, Any, Optional, List
 
 from api.auth.security import get_current_user
@@ -107,7 +107,8 @@ async def send_message(
             current_layer=user_state["current_layer"], 
             character_layers=character_layers, 
             db_connection=connection,
-            user_name=current_user["user_name"]
+            user_name=current_user["user_name"],
+            user_id=current_user["user_id"]
         )
 
         # Combine all parts of the response
@@ -133,10 +134,14 @@ async def send_message(
                 current_image_url
             )
 
-        # 4. Save the fully updated history once
+        # 4. Update trust score, capping at 1000
+        trust_change = response_data.get("trust_score_change", 0)
+        new_trust_score = min(user_state["trust_score"] + trust_change, 1000)
+
+        # 5. Save the fully updated history and trust score
         await connection.execute(
-            "UPDATE user_character_state SET conversation_history = $1 WHERE user_id = $2 AND character_id = $3",
-            json.dumps(conversation_history), current_user["user_id"], request.character_id
+            "UPDATE user_character_state SET conversation_history = $1, trust_score = $2 WHERE user_id = $3 AND character_id = $4",
+            json.dumps(conversation_history), new_trust_score, current_user["user_id"], request.character_id
         )
         
         # 5. Decrement tokens (only once per user message)
@@ -170,7 +175,7 @@ async def send_gift(
             new_token_balance = user['tokens'] - gift["token_cost"]
             await connection.execute("UPDATE users SET tokens = $1 WHERE id = $2", new_token_balance, current_user["user_id"])
             user_state = await connection.fetchrow("SELECT trust_score, conversation_history FROM user_character_state WHERE user_id = $1 AND character_id = $2 FOR UPDATE", current_user["user_id"], request.character_id)
-            new_trust_score = user_state["trust_score"] + gift["trust_gain"]
+            new_trust_score = min(user_state["trust_score"] + gift["trust_gain"], 1000)
             await connection.execute("UPDATE user_character_state SET trust_score = $1 WHERE user_id = $2 AND character_id = $3", new_trust_score, current_user["user_id"], request.character_id)
 
         character = await connection.fetchrow("SELECT * FROM characters WHERE id = $1", request.character_id)
@@ -256,6 +261,79 @@ async def send_gift(
         await connection.execute("INSERT INTO messages (character_id, user_id, response, image_url, created_at) VALUES ($1, $2, $3, $4, NOW())", request.character_id, current_user["user_id"], full_character_response, unlocked_photo_url)
 
         return GiftResponse(new_trust_score=new_trust_score, new_token_balance=new_token_balance, message=f"You successfully sent a {request.gift_type.value} gift!", character_response=gift_response_dict.get("response", ""), character_response_parts=gift_response_dict.get("message_parts", []), unlocked_photo_url=unlocked_photo_url)
+
+class PhotoGenerationRequest(BaseModel):
+    character_id: uuid.UUID
+    intimacy_analysis: Dict
+
+@router.post("/dialogue/generate-photo-from-proposal")
+async def generate_photo_from_proposal(
+    request: PhotoGenerationRequest,
+    current_user=Depends(get_current_user),
+    db=Depends(get_db),
+    dialogue_engine: AIDialogueEngine = Depends(lambda db=Depends(get_db): AIDialogueEngine(db))
+):
+    # Define cost for on-demand generation
+    token_cost = 50 # Corresponds to a "large" gift
+
+    async with db.acquire() as connection:
+        async with connection.transaction():
+            # 1. Deduct tokens
+            user = await connection.fetchrow("SELECT tokens FROM users WHERE id = $1 FOR UPDATE", current_user["user_id"])
+            if user['tokens'] < token_cost:
+                raise HTTPException(status_code=403, detail="Not enough tokens for photo generation.")
+            new_token_balance = user['tokens'] - token_cost
+            await connection.execute("UPDATE users SET tokens = $1 WHERE id = $2", new_token_balance, current_user["user_id"])
+
+            # 2. Trigger background generation task
+            character = await connection.fetchrow("SELECT * FROM characters WHERE id = $1", request.character_id)
+            user_state = await connection.fetchrow("SELECT trust_score, conversation_history FROM user_character_state WHERE user_id = $1 AND character_id = $2", current_user["user_id"], request.character_id)
+
+            # Use the AI service to generate a high-quality prompt based on the original request
+            generation_prompt_data = await dialogue_engine.generate_on_demand_image_prompt(
+                user_request=request.intimacy_analysis.get("user_intent", "a beautiful photo"),
+                character_data=dict(character),
+                trust_score=user_state["trust_score"],
+                style="photorealistic",
+                conversation_history=json.loads(user_state.get("conversation_history") or "[]")
+            )
+
+            generation_prompt = generation_prompt_data.get("prompt")
+            if not generation_prompt:
+                raise HTTPException(status_code=500, detail="Failed to generate a prompt for the image.")
+
+            # Create a new unique ID for this on-demand content
+            photo_id = uuid.uuid4()
+
+            # Use the AI service to generate a high-quality prompt based on the original request
+            generation_prompt_data = await dialogue_engine.generate_on_demand_image_prompt(
+                user_request=request.intimacy_analysis.get("user_intent", "a beautiful photo"),
+                character_data=dict(character),
+                trust_score=user_state["trust_score"],
+                style="photorealistic",
+                conversation_history=json.loads(user_state.get("conversation_history") or "[]")
+            )
+
+            generation_prompt = generation_prompt_data.get("prompt")
+            if not generation_prompt:
+                raise HTTPException(status_code=500, detail="Failed to generate a prompt for the image.")
+
+            # Create a new unique ID for this on-demand content
+            photo_id = uuid.uuid4()
+
+            from api.tasks import generate_and_send_photo_task
+            background_tasks = BackgroundTasks()
+            background_tasks.add_task(
+                generate_and_send_photo_task,
+                character_id=request.character_id,
+                user_id=current_user["user_id"],
+                photo_id=photo_id,
+                user_prompt=generation_prompt
+            )
+            
+            # Return a confirmation to the user
+            return {"message": "Your unique photo is being generated! It will appear in the chat shortly.", "new_token_balance": new_token_balance}
+
 
 async def _generate_and_unlock_photo(db, character_id: uuid.UUID, photo_id: uuid.UUID, prompt: str) -> Optional[str]:
     """Generates a photo, saves it, unlocks it, and returns the URL. Blocking."""

@@ -41,7 +41,7 @@ const References: React.FC<ReferencesProps> = ({ data, refetchData }) => {
     formData.append('file', file);
 
     try {
-      const response = await fetch(`/api/admin/characters/reference_photos/${photoId}/upload`, {
+      const response = await fetch(`/api/admin/characters/reference_photos/${characterId}/upload`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` },
         body: formData,

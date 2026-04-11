@@ -142,7 +142,7 @@ async def generate_intimate_photo_task(db, character_id: uuid.UUID, user_id: uui
     except Exception as e:
         print(f"!!! ERROR in intimate photo generation task: {e} !!!")
 
-async def generate_and_send_photo_task(db, character_id: uuid.UUID, user_id: uuid.UUID, user_prompt: str):
+async def generate_and_send_photo_task(db, character_id: uuid.UUID, user_id: uuid.UUID, photo_id: uuid.UUID, user_prompt: str):
     """Background task for on-demand photo generation (Plan C)."""
     print(f"--- Starting on-demand photo generation for user {user_id} with prompt: {user_prompt} ---")
     comfy_service = ComfyService()
@@ -182,7 +182,7 @@ async def generate_and_send_photo_task(db, character_id: uuid.UUID, user_id: uui
 
         upload_dir = "uploads/generated_photos"
         os.makedirs(upload_dir, exist_ok=True)
-        file_path = os.path.join(upload_dir, f"{uuid.uuid4()}.jpg")
+        file_path = os.path.join(upload_dir, f"{photo_id}.jpg")
         
         async with aiofiles.open(file_path, 'wb') as out_file:
             await out_file.write(generated_image_bytes)

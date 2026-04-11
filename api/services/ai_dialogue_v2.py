@@ -1,5 +1,6 @@
 import os
 import json
+import uuid
 import aiohttp
 from typing import Dict, List, Optional
 from datetime import datetime
@@ -98,7 +99,7 @@ class AIDialogueEngine:
             suggested_gift = decision.get("suggested_gift", "small")
             intimacy_level = intimacy_analysis.get("intimacy_level", "special")
             
-            return f'''\n\n--- PHOTO ACTION: INSUFFICIENT TRUST ---\nUser wants a {intimacy_level} photo but needs {required_trust} trust (has {current_trust}). Suggest {suggested_gift} gift.\nYour task: Playfully explain that this type of photo requires more trust between you. Suggest they show their affection with a {suggested_gift} gift to unlock this special content. Be charming and persuasive, not demanding.'''
+            return f'''\n\n--- PHOTO ACTION: INSUFFICIENT TRUST ---\nUser wants a {intimacy_level} photo but needs {required_trust} trust (has {current_trust}).\nYour task: Playfully explain that this type of photo requires more trust. Propose that a {suggested_gift} gift would be the perfect way to convince you to create a special photo just for them. Be charming and suggestive, not demanding.'''
 
         elif action == "propose_gift":
             suggested_gift = decision.get("suggested_gift", "medium")
@@ -116,6 +117,11 @@ class AIDialogueEngine:
             details_str = ", ".join(specific_details) if specific_details else "their imagination"
             
             return f'''\n\n--- PHOTO ACTION: PROPOSE GENERATION ---\nUser wants {user_intent} with elements: {details_str}. Nothing in gallery matches.\nYour task: Formulate a response where you offer to create a brand new, unique photo based on their specific request. Mention that this will be a special collaboration just for them. Be excited and personal.'''
+
+        elif action == "propose_alternative":
+            requested_level = decision.get("requested_level", "special")
+            photo_desc = decision.get("photo", {}).get("description", "a photo I thought you'd like")
+            return f'''\n\n--- PHOTO ACTION: PROPOSE ALTERNATIVE ---\nUser wants a {requested_level} photo but you can't send that level. Instead you offer: '{photo_desc}'.\nYour task: Politely decline the too-intimate request but offer the alternative photo you do have. Say something like "I'm not ready for that yet, but here's something else..." Be charming and reassuring.'''
         
         return "" # No specific photo action
 
@@ -134,7 +140,7 @@ class AIDialogueEngine:
                 messages=messages,
                 model_id=character_data.get('llm_model'),
                 temperature=0.75,
-                max_tokens=150
+                max_tokens=250
             )
             return response.strip()
         except Exception as e:
@@ -316,7 +322,8 @@ class AIDialogueEngine:
             "Твоя задача - отреагировать на этот подарок. Твои слова должны звучать естественно и эмоционально.",
             "- Поблагодари пользователя, но сделай это нешаблонно.",
             "- Твоя реакция должна соответствовать размеру подарка и вашему уровню доверия.",
-            "- Твой ответ должен быть только текстом, который ты бы написала в чате. Не используй звездочки (*) для описания действий.",
+            "- Твой ответ должен быть только текстом, который ты бы написала в чате.",
+            "- **ЗАПРЕЩЕНО:** Не используй звездочки (*) или любые другие символы для описания действий, эмоций или тона (например, *улыбается*, *смеется*).",
         ]
 
         if unlocked_photo_url:
@@ -408,7 +415,7 @@ class AIDialogueEngine:
         character_layers: List[Dict],
         db_connection,
         user_name: str = None,
-        user_data: Dict = None,
+        user_id: uuid.UUID = None,
         image_url: Optional[str] = None,
         photo_context_prompt: Optional[str] = None
     ) -> Dict:
@@ -430,24 +437,26 @@ class AIDialogueEngine:
                 print("--- HANDLING PHOTO REQUEST ---")
                 print(f"User Message: {user_message}")
                 print(f"Character ID: {character_data['id']}")
-                print(f"User Data: {user_data}")
+                print(f"User ID: {user_id}")
                 print(f"User Trust Score: {user_trust_score}")
                 # --- END LOGGING ---
 
                 photo_decision = await self.photo_service.handle_photo_request(
-                    user_message, character_data['id'], user_data.get('user_id'), 
+                    user_message, character_data['id'], user_id, 
                     user_trust_score, conversation_history, character_data
                 )
 
                 if photo_decision:
                     # If the photo service decided on a complete response (e.g., proposing a gift)
-                    if photo_decision.get("action") in ["propose_gift", "propose_generation"]:
+                    if photo_decision.get("action") in ["propose_gift", "propose_generation", "insufficient_trust"]:
                         response_text = await self._generate_photo_proposal_response(photo_decision, character_data, conversation_history)
-                        message_parts = self._split_long_message(response_text)
+                        # For proposals, send the entire message as one block, don't split it.
                         return {
-                            "response": message_parts[0],
-                            "message_parts": message_parts[1:],
-                            "trust_score_change": 1, # Small trust gain for engaging
+                            "response": response_text,
+                            "message_parts": [],
+                            "action": "awaiting_gift_for_generation",
+                            "photo_proposal_details": photo_decision.get("intimacy_analysis"),
+                            "trust_score_change": 1,
                             "layer_unlocked": False,
                             "generated_at": datetime.utcnow().isoformat()
                         }
@@ -456,6 +465,18 @@ class AIDialogueEngine:
                     if photo_decision.get("action") == "send_existing":
                         context_instructions += self._generate_photo_action_prompt(photo_decision)
                         image_url = photo_decision.get("photo", {}).get("media_url")
+                    
+                    # If proposing an alternative photo, attach it immediately
+                    if photo_decision.get("action") == "propose_alternative":
+                        response_text = await self._generate_photo_proposal_response(photo_decision, character_data, conversation_history)
+                        return {
+                            "response": response_text,
+                            "message_parts": [],
+                            "image_url": photo_decision["photo"]["media_url"],
+                            "trust_score_change": 1,
+                            "layer_unlocked": False,
+                            "generated_at": datetime.utcnow().isoformat()
+                        }
                 else:
                     print("!!! WARNING: Photo service returned a None decision.")
 
@@ -490,6 +511,12 @@ class AIDialogueEngine:
                 max_tokens=200
             )
             
+            # --- Brute-force fix for roleplaying actions ---
+            import re
+            ai_response_text = re.sub(r'\*.*?\*', '', ai_response_text).strip()
+            # --- End of fix ---
+
+            
             if not ai_response_text:
                 return {
                     "response": "I'm having trouble responding right now. Let me try again.",
@@ -518,6 +545,7 @@ class AIDialogueEngine:
             return {
                 "response": message_parts[0],
                 "message_parts": message_parts[1:],
+                "image_url": image_url, # Pass the image URL if available
                 "trust_score_change": self._calculate_trust_change(user_message, final_response),
                 "layer_unlocked": self._check_layer_unlock(user_trust_score, current_layer, character_layers),
                 "generated_at": datetime.utcnow().isoformat()
@@ -548,20 +576,7 @@ Act like a real person texting. Follow these:
 
 4. **STAY ON TOPIC**: Build on what was just said. Don't restart the chat.
 
-5. **NO ACTIONS**: Only say what you'd type. No *smiles*, no asterisks, no descriptions.
-
-CONVERSATION STATE:
-{conversation_context}
-
-Memory:
-- Short-term: {len(memory_tiers['short_term'])} msgs
-- Medium-term: {len(memory_tiers['medium_term'])} msgs  
-- Long-term: {len(memory_tiers['long_term'])} topics
-
-User Trust: {user_trust_score}/100
-Energy: {'Open' if user_trust_score >= 70 else 'Cautious' if user_trust_score >= 40 else 'Reserved'}
-
-IMPORTANT: Keep it short and conversational.
+5. **NO ACTIONS**: Only say what you'd type. No *smiles*, no asterisks, or other roleplay actions. This is a text conversation, not a roleplay session. Never use asterisks to describe actions, emotions, or expressions.
 """
     def _get_trust_adjustments(self, trust_score: int) -> str:
         if trust_score < 20:

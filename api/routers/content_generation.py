@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from api.database.connection import get_db
 from api.services.image_generator import OpenRouterImageGenerator
 from api.services.comfy_service import ComfyService
+from api.services.image_optimizer import ImageOptimizerService
 from api.auth.security import role_required
 
 logger = logging.getLogger(__name__)
@@ -45,7 +46,8 @@ async def generate_photo_for_content_item(request: GenerationRequest, db=Depends
     if not ref_photo_record or not ref_photo_record['media_url']:
         raise HTTPException(status_code=404, detail="Reference photo for character not found.")
     
-    base_dir = os.getcwd() # Should be /opt/EVA_AI
+    base_dir = os.getcwd()
+    # Use the exact path from the database
     reference_photo_path = os.path.join(base_dir, ref_photo_record['media_url'].lstrip('/'))
     
     if not os.path.exists(reference_photo_path):
@@ -102,6 +104,10 @@ async def generate_photo_for_content_item(request: GenerationRequest, db=Depends
     if not image_bytes:
         raise HTTPException(status_code=500, detail="Image generation failed for both routes.")
 
+    # --- NEW: Optimize the generated image ---
+    optimizer = ImageOptimizerService()
+    optimized_image_bytes = optimizer.optimize_image(image_bytes)
+
     # 4. Determine target and save the image
     logger.info(f"--- SAVING PROCESS: Starting save for content_item_id: {request.content_item_id} ---")
     # Check if the content_item_id is a teaser first
@@ -112,11 +118,11 @@ async def generate_photo_for_content_item(request: GenerationRequest, db=Depends
         # It's a teaser photo, save to the teaser directory
         content_upload_dir = os.path.join("uploads", str(request.character_id), "content")
         os.makedirs(content_upload_dir, exist_ok=True)
-        file_name = f"{request.content_item_id}.png"
+        file_name = f"{request.content_item_id}.jpg" # Now saving as JPG
         file_path = os.path.join(content_upload_dir, file_name)
 
         with open(file_path, "wb") as f:
-            f.write(image_bytes)
+            f.write(optimized_image_bytes)
         
         db_file_path = f"/{file_path}"
 
@@ -143,7 +149,17 @@ async def generate_photo_for_content_item(request: GenerationRequest, db=Depends
         logger.info(f"--- SAVING PROCESS: Checking layer {layer['id']}... ---")
         for content_type in ['photo_prompts', 'video_prompts']:
             if content_type in content_plan:
-                for item in content_plan[content_type]:
+                prompts = content_plan.get(content_type, [])
+                prompt_list = []
+                if isinstance(prompts, dict):
+                    prompt_list = prompts.values()
+                elif isinstance(prompts, list):
+                    prompt_list = prompts
+
+                for item in prompt_list:
+                    if not isinstance(item, dict):
+                        logger.warning(f"--- SAVING PROCESS: Skipping malformed item in content_plan: {item} ---")
+                        continue
                     logger.debug(f"--- SAVING PROCESS: Comparing {item.get('id')} with {request.content_item_id} ---")
                     if item['id'] == request.content_item_id:
                         target_layer_id = layer['id']
@@ -163,11 +179,11 @@ async def generate_photo_for_content_item(request: GenerationRequest, db=Depends
     content_upload_dir = os.path.join("uploads", str(request.character_id), "layers", str(target_layer_id), "content")
     os.makedirs(content_upload_dir, exist_ok=True)
 
-    file_name = f"{request.content_item_id}.png"
+    file_name = f"{request.content_item_id}.jpg" # Now saving as JPG
     file_path = os.path.join(content_upload_dir, file_name)
 
     with open(file_path, "wb") as f:
-        f.write(image_bytes)
+        f.write(optimized_image_bytes)
     
     db_file_path = f"/{file_path}"
 

@@ -67,12 +67,12 @@ const CharacterProfile = () => {
               <div className="mb-4">
                 <div className="flex justify-between text-sm text-purple-300 mb-2">
                   <span>Trust</span>
-                  <span className="font-semibold">{Math.round(character.trust_score / 10)}%</span>
+                  <span className="font-semibold">{Math.min(Math.round(character.trust_score / 10), 100)}%</span>
                 </div>
                 <div className="w-full bg-white/10 rounded-full h-3 overflow-hidden">
                   <div 
                     className="bg-gradient-to-r from-purple-400 via-pink-400 to-rose-400 h-3 rounded-full transition-all duration-500 group-hover:from-purple-500 group-hover:via-pink-500 group-hover:to-rose-500" 
-                    style={{ width: `${Math.round(character.trust_score / 10)}%` }}
+                    style={{ width: `${Math.min(Math.round(character.trust_score / 10), 100)}%` }}
                   ></div>
                 </div>
               </div>
@@ -105,7 +105,7 @@ const CharacterProfile = () => {
               >
                 {/* Image or Placeholder */}
                 <img
-                  src={item.thumbnail_url}
+                  src={item.thumbnail_url || item.media_url}
                   alt={item.description || 'Content'}
                   className={`w-full h-full object-cover`}
                   onError={(e) => {

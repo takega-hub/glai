@@ -4,6 +4,7 @@ import uuid
 import json
 import os
 import aiofiles
+from api.services.image_optimizer import ImageOptimizerService
 
 from api.database.connection import get_db
 
@@ -45,11 +46,27 @@ async def upload_content(content_item_id: str, file: UploadFile = File(...), db=
             unique_filename = f"{content_item_id}.{file_extension}"
             file_path = os.path.join(upload_dir, unique_filename)
             
-            async with aiofiles.open(file_path, 'wb') as out_file:
-                content = await file.read()
-                await out_file.write(content)
-            
-            db_file_path = f"/{file_path}"
+            file_content = await file.read()
+
+            # Optimize the uploaded photo
+            if file.content_type.startswith("image/"):
+                optimizer = ImageOptimizerService()
+                optimized_content = optimizer.optimize_image(file_content)
+                
+                file_extension = "jpg" # Optimizer always outputs JPEG
+                unique_filename = f"{content_item_id}_optimized.{file_extension}"
+                file_path = os.path.join(upload_dir, unique_filename)
+                
+                async with aiofiles.open(file_path, 'wb') as out_file:
+                    await out_file.write(optimized_content)
+
+                db_file_path = f"/{file_path}"
+            else:
+                # For non-image files, save them directly
+                file_path = os.path.join(upload_dir, f"{content_item_id}.{file.filename.split('.')[-1]}")
+                async with aiofiles.open(file_path, 'wb') as out_file:
+                    await out_file.write(file_content)
+                db_file_path = f"/{file_path}"
             
             await db.execute("UPDATE content SET media_url = $1 WHERE id = $2", db_file_path, content_item_id)
             return {"message": "Teaser content uploaded successfully", "media_url": db_file_path}
@@ -70,11 +87,27 @@ async def upload_content(content_item_id: str, file: UploadFile = File(...), db=
     unique_filename = f"{content_item_id}.{file_extension}"
     file_path = os.path.join(upload_dir, unique_filename)
 
-    async with aiofiles.open(file_path, 'wb') as out_file:
-        content = await file.read()
-        await out_file.write(content)
-    
-    updated_media_url = f"/{file_path}"
+    file_content = await file.read()
+
+    # Optimize the uploaded photo
+    if file.content_type.startswith("image/"):
+        optimizer = ImageOptimizerService()
+        optimized_content = optimizer.optimize_image(file_content)
+        
+        file_extension = "jpg" # Optimizer always outputs JPEG
+        unique_filename = f"{content_item_id}_optimized.{file_extension}"
+        file_path = os.path.join(upload_dir, unique_filename)
+        
+        async with aiofiles.open(file_path, 'wb') as out_file:
+            await out_file.write(optimized_content)
+
+        updated_media_url = f"/{file_path}"
+    else:
+        # For non-image files, save them directly
+        file_path = os.path.join(upload_dir, f"{content_item_id}.{file.filename.split('.')[-1]}")
+        async with aiofiles.open(file_path, 'wb') as out_file:
+            await out_file.write(file_content)
+        updated_media_url = f"/{file_path}"
 
     for content_type in ['photo_prompts', 'video_prompts', 'audio_texts']:
         if content_type in content_plan:
