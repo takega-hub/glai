@@ -275,6 +275,7 @@ Respond with ONLY a JSON object:
 
     async def handle_photo_request(self, user_message: str, character_id: uuid.UUID, 
                                  user_id: uuid.UUID, user_trust_score: int, 
+                                 current_layer: int, character_layers: List[Dict],
                                  conversation_history: List[Dict] = None,
                                  character_data: Dict = None) -> Dict:
         """Main method to handle photo requests with new, smarter logic."""
@@ -285,38 +286,45 @@ Respond with ONLY a JSON object:
             character_data or {}
         )
         
-        is_generic_request = intimacy_analysis.get('intimacy_level') == 'casual' and "general" in intimacy_analysis.get('user_intent', '')
+        # --- Redefined Generic Request Logic ---
+        user_message_lower = user_message.lower()
+        is_on_demand_request = any(keyword in user_message_lower for keyword in ["особое", "новое", "special", "custom", "new"])
+        is_generic_request = (intimacy_analysis.get('intimacy_level') == 'casual' and "general" in intimacy_analysis.get('user_intent', '')) and not is_on_demand_request
 
-        content_match = None
-
-        # 2. Handle the request based on its type
+        # --- Smart Generic Request Logic ---
         if is_generic_request:
-            # For generic requests, find a random piece of content the user can see now
-            print("--- Generic photo request: Finding random unlockable content. ---")
-            content_match = await self.find_random_unlockable_content(character_id, user_id, user_trust_score)
-            if content_match:
-                response = {
-                    "action": "send_existing",
-                    "photo": content_match,
-                    "reason": f"Found a random unlockable photo for you: {content_match['description']}"
-                }
-                print(f"[DEBUG] handle_photo_request returning for generic request: {response}")
-                return response
-            else:
-                # If no random content is found, propose generating a new one for a gift
-                print("--- No random content found. Proposing gift for new generation. ---")
+            # 1. Try to find an unseen photo in the CURRENT layer first
+            current_layer_photo = await self.find_random_unlockable_content(character_id, user_id, user_trust_score, specific_layer=current_layer)
+            if current_layer_photo:
                 return {
-                    "action": "propose_gift",
-                    "reason": "No random photo available, proposing to generate a new one.",
-                    "suggested_gift": "large",
-                    "intimacy_analysis": intimacy_analysis
+                    "action": "send_existing",
+                    "photo": current_layer_photo,
+                    "reason": f"Found a photo from your current layer to share: {current_layer_photo['description']}"
                 }
-        else:
-            # For specific requests, use AI to find the best match
-            print("--- Specific photo request: Using AI to find the best match. ---")
-            content_match = await self.find_best_matching_photo_with_ai(user_message, character_id, user_id)
 
-        # 3. If a specific match was found, check trust and propose gift if needed
+            # 2. If none, calculate trust needed for NEXT layer and propose the right gift
+            next_layer_info = self._get_next_layer_info(current_layer, character_layers)
+            if next_layer_info:
+                trust_needed = next_layer_info["min_trust_score"] - user_trust_score
+                if trust_needed > 0:
+                    suggested_gift = self._get_smallest_gift_for_trust(trust_needed)
+                    return {
+                        "action": "propose_gift",
+                        "reason": f"To unlock the next set of photos, you need {trust_needed} more trust.",
+                        "suggested_gift": suggested_gift,
+                        "intimacy_analysis": intimacy_analysis
+                    }
+
+            # 3. Fallback: If no next layer or other issue, propose a large gift for on-demand generation
+            return {
+                "action": "propose_gift",
+                "reason": "No more photos to unlock, but we can create a special one just for you.",
+                "suggested_gift": "large",
+                "intimacy_analysis": intimacy_analysis
+            }
+
+        # --- Specific Request Logic (existing logic) ---
+        content_match = await self.find_best_matching_photo_with_ai(user_message, character_id, user_id)
         if content_match and isinstance(content_match, dict):
             required_trust = content_match.get("trust_required") or 50
             if user_trust_score >= required_trust:
@@ -334,7 +342,17 @@ Respond with ONLY a JSON object:
                     "photo_description": content_match['description']
                 }
 
-        # 4. Plan C: If no content is found at all, propose generation
+        # --- Fallback for specific requests: Propose On-Demand Generation ---
+        if not is_generic_request:
+            print("--- No specific match found. Proposing gift for ON-DEMAND generation. ---")
+            return {
+                "action": "propose_gift",
+                "reason": "No existing photo matches your specific request, but we can create a new one.",
+                "suggested_gift": "large", # On-demand is always a large gift
+                "intimacy_analysis": intimacy_analysis
+            }
+
+        # --- Final Fallback ---
         print("--- No suitable content found. Using fallback message. ---")
         return {
             "action": "show_message",
@@ -426,20 +444,33 @@ Respond with ONLY the UUID of the best matching photo. For example: `a1b2c3d4-e5
             print(f"AI photo matching failed: {e}, returning first available photo as fallback.")
             return dict(available_photos[0]) if available_photos else None
 
-    async def find_random_unlockable_content(self, character_id: uuid.UUID, user_id: uuid.UUID, user_trust_score: int) -> Optional[Dict]:
+    def _get_next_layer_info(self, current_layer_index: int, character_layers: List[Dict]) -> Optional[Dict]:
+        """Gets the information for the next layer."""
+        if not character_layers or current_layer_index >= len(character_layers) - 1:
+            return None
+        return character_layers[current_layer_index + 1]
+
+    def _get_smallest_gift_for_trust(self, trust_needed: int) -> str:
+        """Determines the smallest gift that satisfies the trust needed."""
+        if trust_needed <= 10:
+            return "small"
+        elif trust_needed <= 30:
+            return "medium"
+        else:
+            return "large"
+
+    async def find_random_unlockable_content(self, character_id: uuid.UUID, user_id: uuid.UUID, user_trust_score: int, specific_layer: Optional[int] = None) -> Optional[Dict]:
         """Finds a random, not-yet-unlocked photo or teaser that the user has enough trust for."""
-        async with self.db.acquire() as connection:
-            content = await connection.fetchrow(
-                """WITH potential_content AS (
+        query = """WITH potential_content AS (
                     SELECT elem->>'id' as id, elem->>'media_url' as url, elem->>'prompt' as description, 
                            COALESCE((elem->>'trust_required')::int, 0) as trust_required, 'photo' as type,
-                           elem->>'is_locked' as is_locked
+                           elem->>'is_locked' as is_locked, l.layer_order
                     FROM layers l, LATERAL jsonb_array_elements(l.content_plan -> 'photo_prompts') elem
                     WHERE l.character_id = $1
                     UNION ALL
                     SELECT elem->>'id' as id, elem->>'media_url' as url, elem->>'prompt' as description, 
                            COALESCE((elem->>'trust_required')::int, 0) as trust_required, 'teaser' as type,
-                           elem->>'is_locked' as is_locked
+                           elem->>'is_locked' as is_locked, l.layer_order
                     FROM layers l, LATERAL jsonb_array_elements(l.content_plan -> 'teaser_prompts') elem
                     WHERE l.character_id = $1
                 )
@@ -449,9 +480,15 @@ Respond with ONLY the UUID of the best matching photo. For example: `a1b2c3d4-e5
                   AND pc.url IS NOT NULL
                   AND pc.trust_required <= $2
                   AND (pc.is_locked IS NULL OR pc.is_locked = 'true')
-                ORDER BY random()
-                LIMIT 1;""",
-                character_id, 
-                user_trust_score
-            )
+        """
+        params = [character_id, user_trust_score]
+
+        if specific_layer is not None:
+            query += " AND pc.layer_order = $3"
+            params.append(specific_layer)
+        
+        query += " ORDER BY random() LIMIT 1;"
+
+        async with self.db.acquire() as connection:
+            content = await connection.fetchrow(query, *params)
             return dict(content) if content else None

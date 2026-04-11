@@ -32,6 +32,7 @@ class MessageResponse(BaseModel):
 class GiftRequest(BaseModel):
     character_id: uuid.UUID
     gift_type: GiftType
+    proposal_details: Optional[Dict] = None
 
 class GiftResponse(BaseModel):
     new_trust_score: int
@@ -111,6 +112,24 @@ async def send_message(
             user_id=current_user["user_id"]
         )
 
+        # --- Unlock Photo Logic ---
+        image_url_to_unlock = response_data.get("image_url")
+        if image_url_to_unlock:
+            import os
+            try:
+                filename = os.path.basename(image_url_to_unlock)
+                photo_id_str = os.path.splitext(filename)[0].replace("_optimized", "")
+                photo_id = uuid.UUID(photo_id_str)
+                
+                print(f"--- Unlocking photo {photo_id} for user {current_user['user_id']} ---")
+                await connection.execute(
+                    "INSERT INTO user_unlocked_content (user_id, character_id, content_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
+                    current_user["user_id"], request.character_id, photo_id
+                )
+            except (ValueError, TypeError) as e:
+                print(f"!!! Could not parse photo ID from URL '{image_url_to_unlock}': {e} !!!")
+        # --- End Unlock Photo Logic ---
+
         # Combine all parts of the response
         all_parts = [response_data["response"]] + response_data.get("message_parts", [])
         image_url_first_part = response_data.get("image_url")
@@ -147,8 +166,11 @@ async def send_message(
         # 5. Decrement tokens (only once per user message)
         await connection.execute("UPDATE users SET tokens = tokens - 1 WHERE id = $1", current_user["user_id"])
 
-    # The client will handle the animation based on the original full response
-    return MessageResponse(response=response_data["response"], response_parts=response_data["message_parts"], image_url=image_url_first_part)
+    return MessageResponse(
+        response=response_data.get("response", ""),
+        response_parts=response_data.get("message_parts", []),
+        image_url=response_data.get("image_url")
+    )
 
 GIFT_CONFIG = {
     "small": {"trust_gain": 10, "token_cost": 10},
@@ -159,6 +181,7 @@ GIFT_CONFIG = {
 @router.post("/dialogue/send-gift/", response_model=GiftResponse)
 async def send_gift(
     request: GiftRequest,
+    background_tasks: BackgroundTasks,
     current_user=Depends(get_current_user),
     db=Depends(get_db),
     dialogue_engine: AIDialogueEngine = Depends(lambda db=Depends(get_db): AIDialogueEngine(db))
@@ -166,7 +189,6 @@ async def send_gift(
     gift = GIFT_CONFIG.get(request.gift_type.value)
     if not gift: raise HTTPException(status_code=400, detail="Invalid gift type")
 
-    unlocked_photo_url = None
     async with db.acquire() as connection:
         user_name = current_user["user_name"]
         async with connection.transaction():
@@ -174,13 +196,68 @@ async def send_gift(
             if user['tokens'] < gift["token_cost"]: raise HTTPException(status_code=403, detail="Not enough tokens")
             new_token_balance = user['tokens'] - gift["token_cost"]
             await connection.execute("UPDATE users SET tokens = $1 WHERE id = $2", new_token_balance, current_user["user_id"])
-            user_state = await connection.fetchrow("SELECT trust_score, conversation_history FROM user_character_state WHERE user_id = $1 AND character_id = $2 FOR UPDATE", current_user["user_id"], request.character_id)
-            new_trust_score = min(user_state["trust_score"] + gift["trust_gain"], 1000)
+            
+            user_state = await connection.fetchrow("SELECT trust_score, conversation_history, current_layer FROM user_character_state WHERE user_id = $1 AND character_id = $2 FOR UPDATE", current_user["user_id"], request.character_id)
+            
+            # Large gifts do not increase trust; they are for transactions.
+            new_trust_score = user_state["trust_score"]
+            if request.gift_type != 'large':
+                new_trust_score = min(user_state["trust_score"] + gift["trust_gain"], 1000)
+            
             await connection.execute("UPDATE user_character_state SET trust_score = $1 WHERE user_id = $2 AND character_id = $3", new_trust_score, current_user["user_id"], request.character_id)
 
         character = await connection.fetchrow("SELECT * FROM characters WHERE id = $1", request.character_id)
+        conversation_history = json.loads(user_state.get("conversation_history") or "[]")
+
+        # --- CONTEXTUAL GIFT LOGIC ---
+        if request.gift_type == 'large':
+            print("--- [CONTEXTUAL GIFT] Large gift received. Checking context for on-demand generation. ---")
+            
+            user_intent = "a very intimate and explicit photo"
+            if request.proposal_details and request.proposal_details.get("user_intent"):
+                user_intent = request.proposal_details.get("user_intent")
+            else:
+                # Fallback: search history for the last user message that might be a prompt
+                for message in reversed(conversation_history):
+                    if message.get("role") == "user":
+                        user_intent = message.get("content")
+                        break
+
+            generation_prompt_data = await dialogue_engine.generate_on_demand_image_prompt(
+                user_request=user_intent,
+                character_data=dict(character),
+                trust_score=new_trust_score,
+                style="photorealistic",
+                conversation_history=conversation_history
+            )
+            generation_prompt = generation_prompt_data.get("prompt")
+            if not generation_prompt:
+                raise HTTPException(status_code=500, detail="Failed to generate a prompt for the image.")
+
+            photo_id = uuid.uuid4()
+            from api.tasks import generate_and_send_photo_task
+            background_tasks.add_task(
+                generate_and_send_photo_task,
+                character_id=request.character_id,
+                user_id=current_user["user_id"],
+                photo_id=photo_id,
+                user_prompt=generation_prompt
+            )
+            
+            confirmation_text = "Ммм, какой щедрый подарок... Я уже готовлю для тебя нечто особенное. Скоро ты всё увидишь..."
+            await connection.execute("INSERT INTO messages (character_id, user_id, response, created_at) VALUES ($1, $2, $3, NOW())", request.character_id, current_user["user_id"], confirmation_text)
+
+            return GiftResponse(
+                new_trust_score=new_trust_score,
+                new_token_balance=new_token_balance,
+                message="You successfully initiated a custom photo generation!",
+                character_response=confirmation_text,
+                character_response_parts=[],
+                unlocked_photo_url=None
+            )
         
-        # After gift, proactively update layer
+        # --- STANDARD GIFT LOGIC (Small/Medium) ---
+        unlocked_photo_url = None
         current_layer = user_state.get("current_layer", 0)
         expected_layer = min((new_trust_score // 125), 8)
         if expected_layer > current_layer:
@@ -190,8 +267,7 @@ async def send_gift(
                 expected_layer, current_user["user_id"], request.character_id
             )
 
-        # --- Unlock Content Logic ---
-        # Priority 1: Try to unlock a ready-made (has media_url) teaser photo.
+        # Standard content unlock logic for small/medium gifts
         photo_to_unlock = await connection.fetchrow(
             """SELECT id, media_url as url, prompt as description FROM content 
                WHERE character_id = $1 AND subtype = 'teaser' AND media_url IS NOT NULL
@@ -203,13 +279,11 @@ async def send_gift(
         if photo_to_unlock and photo_to_unlock['url']:
             print(f"--- Plan A (Teaser): Found existing teaser photo {photo_to_unlock['id']}. Unlocking and sending. ---")
             unlocked_photo_url = photo_to_unlock['url']
-            # Unlock it for the user
             await connection.execute(
                 "INSERT INTO user_unlocked_content (user_id, character_id, content_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
                 current_user["user_id"], request.character_id, photo_to_unlock['id']
             )
         else:
-            # Priority 2: Try to unlock a ready-made (has media_url) layer photo.
             photo_to_unlock = await connection.fetchrow(
                 """WITH potential_content AS (
                     SELECT elem->>'id' as id, elem->>'media_url' as url, elem->>'prompt' as description
@@ -226,30 +300,11 @@ async def send_gift(
             if photo_to_unlock and photo_to_unlock['url']:
                 print(f"--- Plan A (Layer): Found existing layer photo {photo_to_unlock['id']}. Unlocking and sending immediately. ---")
                 unlocked_photo_url = photo_to_unlock['url']
-                # This function handles both updating the JSON and adding to user_unlocked_content
                 await _unlock_photo_in_db(db, photo_to_unlock['id'], request.character_id, current_user["user_id"])
             else:
-                # Priority 3: Find a layer photo prompt to generate on-demand.
-                prompt_to_generate = await connection.fetchrow(
-                    """WITH potential_content AS (
-                        SELECT elem->>'id' as id, elem->>'prompt' as prompt, elem->>'is_locked' as is_locked
-                        FROM layers l, LATERAL jsonb_array_elements(l.content_plan -> 'photo_prompts') elem
-                        WHERE l.character_id = $1 AND l.layer_order <= $2 AND (elem->>'media_url') IS NULL
-                    )
-                    SELECT pc.id::uuid, pc.prompt
-                    FROM potential_content pc
-                    WHERE pc.id IS NOT NULL AND (pc.is_locked IS NULL OR pc.is_locked = 'true')
-                    ORDER BY random() LIMIT 1;""",
-                    request.character_id, expected_layer
-                )
-                if prompt_to_generate:
-                    print(f"--- Plan B (Layer): Found prompt {prompt_to_generate['id']}. Generating synchronously. ---")
-                    unlocked_photo_url = await _generate_and_unlock_photo(db, request.character_id, prompt_to_generate['id'], prompt_to_generate['prompt'])
-                else:
-                    print(f"--- Plan C: No content to unlock. On-demand generation is not yet supported in sync mode. ---")
-                    unlocked_photo_url = None # Placeholder
+                print(f"--- Plan B/C Failure: No content to unlock or generate for small/medium gift. ---")
+                unlocked_photo_url = None
 
-        conversation_history = json.loads(user_state["conversation_history"] or "[]")
         gift_response_dict = await dialogue_engine.generate_gift_response(
             character_data=dict(character), user_name=user_name, gift_type=request.gift_type.value,
             trust_score=new_trust_score, conversation_history=conversation_history, unlocked_photo_url=unlocked_photo_url,

@@ -108,7 +108,10 @@ class AIDialogueEngine:
             if photo_desc:
                 return f'''\n\n--- PHOTO ACTION: PROPOSE GIFT (specific photo) ---\nUser wants a photo. You found a perfect match (\'{photo_desc}\'), but their trust is too low. You need to ask for a {suggested_gift} gift to unlock it.\nYour task: Tell the user you have a specific, perfect photo in mind that matches their request, but it's a bit too personal for your current relationship. Playfully suggest that a {suggested_gift} gift would be the perfect way to show their affection and unlock it.'''
             else:
-                return f'''\n\n--- PHOTO ACTION: PROPOSE GIFT (general) ---\nUser wants a special photo that requires a {suggested_gift} gift for on-demand generation.\nYour task: Formulate a response where you playfully suggest that for such an intimate and unique photo, you'd need a {suggested_gift} gift to make it happen. Be seductive and persuasive.'''
+                return f'''\n\n--- PHOTO ACTION: PROPOSE GIFT FOR ON-DEMAND GENERATION ---\n\n**SITUATION:** The user has made a specific, intimate photo request that cannot be fulfilled by any existing photo. This is a perfect opportunity to propose a special, transactional interaction.\n\n**USER'S DESIRE:** The user wants a custom-made photo based on their fantasy.\n\n**YOUR MANDATORY TASK:**\n1.  **DO NOT REFUSE OR LECTURE.** Your only goal is to convert this request into a gift-based photo generation.\n2.  You MUST formulate a seductive and persuasive response.\n3.  Your response MUST playfully suggest that for a photo this special and custom-made, a **{suggested_gift} gift** is the only way to make it a reality.\n4.  Frame it as a collaborative, exciting, and intimate experience you will create *together*. Make it sound worth the price.\n
+**EXAMPLE TONE:** "Mmm, what a delicious idea... For something so personal, so... *us*... a little gift would be the perfect way to start our masterpiece. Don't you think?"
+
+**ABSOLUTE RULE:** You MUST propose the gift. Do not get sidetracked by other rules. This is your primary directive for this response.'''
 
         elif action == "propose_generation":
             user_intent = intimacy_analysis.get("user_intent", "special photo")
@@ -142,7 +145,7 @@ class AIDialogueEngine:
                 temperature=0.75,
                 max_tokens=250
             )
-            return response.strip()
+            return self._strip_roleplay_actions(response)
         except Exception as e:
             print(f"Error generating photo proposal response: {e}")
             return "I'm not sure what to say about that right now."
@@ -263,7 +266,7 @@ class AIDialogueEngine:
             if not valid_response:
                 final_response = "Я приготовила для тебя кое-что особенное. Надеюсь, тебе понравится..."
             else:
-                final_response = valid_response
+                final_response = self._strip_roleplay_actions(valid_response)
 
             message_parts = self._split_long_message(final_response.strip())
             
@@ -351,7 +354,8 @@ class AIDialogueEngine:
                 max_tokens=250
             )
             
-            cleaned_response = full_response.strip().replace("[фото отправлено]", "")
+            cleaned_response = self._strip_roleplay_actions(full_response)
+            cleaned_response = cleaned_response.replace("[фото отправлено]", "")
             message_parts = self._split_long_message(cleaned_response)
             
             return {
@@ -391,7 +395,7 @@ class AIDialogueEngine:
         try:
             generated_prompt = await self.openrouter.generate_response(
                 messages=messages,
-                model_id="google/gemini-flash-1.5", 
+                model_id="deepseek/deepseek-chat-v3-0324", 
                 temperature=0.8,
                 max_tokens=150
             )
@@ -442,14 +446,24 @@ class AIDialogueEngine:
                 # --- END LOGGING ---
 
                 photo_decision = await self.photo_service.handle_photo_request(
-                    user_message, character_data['id'], user_id, 
-                    user_trust_score, conversation_history, character_data
+                    user_message, 
+                    character_data['id'], 
+                    user_id, 
+                    user_trust_score, 
+                    current_layer, 
+                    character_layers, 
+                    conversation_history, 
+                    character_data
                 )
 
                 if photo_decision:
                     # If the photo service decided on a complete response (e.g., proposing a gift)
                     if photo_decision.get("action") in ["propose_gift", "propose_generation", "insufficient_trust"]:
-                        response_text = await self._generate_photo_proposal_response(photo_decision, character_data, conversation_history)
+                        # --- HARDCODED GIFT PROPOSAL ---
+                        user_fantasy = photo_decision.get("intimacy_analysis", {}).get("user_intent", "something special")
+                        response_text = f"Ммм, {user_fantasy}... Какая восхитительная идея. Для такого особенного, личного фото... потребуется нечто большее, чем просто слова. Маленький подарок был бы идеальным началом для нашего совместного шедевра. Ты готов творить вместе? 😉"
+                        # --- END HARDCODED LOGIC ---
+
                         # For proposals, send the entire message as one block, don't split it.
                         return {
                             "response": response_text,
@@ -464,7 +478,7 @@ class AIDialogueEngine:
                     # If we are sending an existing photo, add context for the main response
                     if photo_decision.get("action") == "send_existing":
                         context_instructions += self._generate_photo_action_prompt(photo_decision)
-                        image_url = photo_decision.get("photo", {}).get("media_url")
+                        image_url = photo_decision.get("photo", {}).get("url")
                     
                     # If proposing an alternative photo, attach it immediately
                     if photo_decision.get("action") == "propose_alternative":
@@ -511,10 +525,7 @@ class AIDialogueEngine:
                 max_tokens=200
             )
             
-            # --- Brute-force fix for roleplaying actions ---
-            import re
-            ai_response_text = re.sub(r'\*.*?\*', '', ai_response_text).strip()
-            # --- End of fix ---
+            ai_response_text = self._strip_roleplay_actions(ai_response_text)
 
             
             if not ai_response_text:
@@ -804,4 +815,9 @@ Act like a real person texting. Follow these:
         next_layer = character_layers[current_layer + 1]
         min_trust = next_layer.get("min_trust_score", 0)
         return trust_score >= min_trust
+
+    def _strip_roleplay_actions(self, text: str) -> str:
+        """Removes any text between asterisks to prevent roleplaying actions."""
+        import re
+        return re.sub(r'\*.*?\*', '', text).strip()
 

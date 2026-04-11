@@ -45,15 +45,12 @@ export const login = (credentials: any) => {
   });
 };
 
-export const sendGift = (characterId: string, giftType: string) => {
+export const sendGift = (characterId: string, giftType: string, proposalDetails: any | null) => {
   return apiClient.post('/dialogue/send-gift/', { 
     character_id: characterId,
-    gift_type: giftType
+    gift_type: giftType,
+    proposal_details: proposalDetails
   });
-};
-
-export const generatePhotoFromProposal = (characterId: string, intimacyAnalysis: any) => {
-    return apiClient.post(`/dialogue/generate-photo-from-proposal`, { character_id: characterId, intimacy_analysis: intimacyAnalysis });
 };
 export const register = (userInfo: any) => apiClient.post('/auth/register', userInfo);
 export const loginAsGuest = () => apiClient.post('/auth/guest');

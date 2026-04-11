@@ -112,7 +112,7 @@ async def generate_intimate_photo_task(db, character_id: uuid.UUID, user_id: uui
             
             # Generate image
             generated_image_bytes = await comfy_service.generate_image_with_face(
-                text_prompt=final_prompt, 
+                text_prompt=final_prompt,
                 face_image_bytes=face_image_bytes
             )
 

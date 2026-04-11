@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Send, Heart, X, ChevronLeft, Gift } from 'lucide-react';
-import { getCharacterById, getChatHistory, sendMessage as sendApiMessage, getBalance, sendGift, generatePhotoFromProposal } from '../../api/userApiClient';
+import { getCharacterById, getChatHistory, sendMessage as sendApiMessage, getBalance, sendGift } from '../../api/userApiClient';
 import { useAuthStore } from '../../store/authStore';
 import { Character, Message } from '../../types/user';
 
@@ -39,6 +39,7 @@ const UserChat = () => {
   const [loading, setLoading] = useState(true);
   const [isTyping, setIsTyping] = useState(false);
   const [isGiftModalOpen, setIsGiftModalOpen] = useState(false);
+  const [photoProposal, setPhotoProposal] = useState<any | null>(null);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -188,6 +189,9 @@ const UserChat = () => {
                 action: i === 0 ? characterResponse.action : undefined,
                 photo_proposal_details: i === 0 ? characterResponse.photo_proposal_details : undefined,
             };
+            if (newAiMessage.action === 'awaiting_gift_for_generation') {
+              setPhotoProposal(newAiMessage.photo_proposal_details);
+            }
             setMessages(prev => [...prev, newAiMessage]);
         }
 
@@ -201,38 +205,11 @@ const UserChat = () => {
     }
   };
 
-  const handleGenerateFromProposal = async (proposalDetails: any) => {
-    if (!characterId) return;
-    try {
-      const response = await generatePhotoFromProposal(characterId, proposalDetails);
-      const { message, new_token_balance } = response.data;
-
-      // Update user's token balance in the store
-      const { user, token } = useAuthStore.getState();
-      if (user && token) {
-        useAuthStore.getState().setAuth(token, { ...user, tokens: new_token_balance });
-      }
-
-      // Add a system message to inform the user
-      const systemMessage: Message = {
-        id: `system-${Date.now()}`,
-        text: message,
-        sender: 'system',
-        timestamp: new Date(),
-      };
-      setMessages(prev => [...prev, systemMessage]);
-
-    } catch (error: any) {
-      console.error("Error generating photo from proposal:", error);
-      alert(error.response?.data?.detail || "Failed to start photo generation.");
-    }
-  };
-
   const handleSendGift = async (giftType: string) => {
     if (!characterId) return;
 
     try {
-      const response = await sendGift(characterId, giftType);
+      const response = await sendGift(characterId, giftType, photoProposal);
       const { new_trust_score, new_token_balance, new_layer, character_response, character_response_parts, unlocked_photo_url } = response.data;
 
       // --- Update State (Character & User) ---
@@ -243,6 +220,9 @@ const UserChat = () => {
       if (user && token) {
         useAuthStore.getState().setAuth(token, { ...user, tokens: new_token_balance });
       }
+
+      // --- Reset proposal state after sending gift ---
+      setPhotoProposal(null);
 
       // --- Prepare the Queue of New Messages ---
       const messageQueue: Omit<Message, 'id' | 'timestamp'>[] = [];
@@ -393,19 +373,9 @@ const UserChat = () => {
                     />
                   </div>
                 )}
-                <p className="text-sm sm:text-base font-medium break-words whitespace-pre-wrap leading-relaxed">
-                  {message.text}
-                </p>
-                {message.action === 'awaiting_gift_for_generation' && (
-                  <div className="mt-3">
-                    <button 
-                      onClick={() => handleGenerateFromProposal(message.photo_proposal_details)}
-                      className="w-full px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 transition-colors"
-                    >
-                      Send Large Gift to Generate Photo
-                    </button>
-                  </div>
-                )}
+                  <p className="text-sm sm:text-base font-medium break-words whitespace-pre-wrap leading-relaxed">
+                    {message.text}
+                  </p>
                 <p className="text-xs opacity-60 mt-1.5 text-right">
                   {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </p>
