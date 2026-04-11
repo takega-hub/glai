@@ -84,6 +84,7 @@ export const changePassword = (current_password: any, new_password: any) => apiC
 
 // Content Gallery API calls
 export const getContentGallery = (characterId: string) => apiClient.get(`/content/character/${characterId}`);
+export const getPersonalGallery = (characterId: string) => apiClient.get(`/characters/${characterId}/personal-gallery`);
 
 // Token API calls
 export const getBalance = () => apiClient.get('/tokens/balance');

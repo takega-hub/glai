@@ -11,7 +11,7 @@ class OpenRouterService:
     def __init__(self):
         self.api_key = config("OPENROUTER_API_KEY", cast=str)
         self.base_url = "https://openrouter.ai/api/v1"
-        self.model = "google/gemini-3-flash-preview"
+        self.model = "deepseek/deepseek-chat-v3-0324"
         
     async def generate_response(
         self, 
@@ -382,32 +382,31 @@ class AIDialogueEngine:
             recent_history = conversation_history[-6:]
             history_summary = "\n".join([f"- {msg['role']}: {msg['content'][:80]}..." for msg in recent_history])
 
-        system_prompt = f"""\n# MISSION: Create a Photo-Realistic Image Prompt\n\n## Character Persona\n- **Name:** {character_data['name']}\n- **Visuals:** {character_data['visual_description']}\n- **Personality:** {character_data['textual_description']}\n\n## Context\n- **User's Request:** {user_request}\n- **Trust Level:** {trust_score}/1000\n- **Desired Style:** {style}\n- **Recent Conversation Context:**\n{history_summary}\n\n## YOUR TASK\nBased on all the context above, generate a single, concise, and powerful image prompt for an AI image generator (like Midjourney or DALL-E). The prompt MUST be in ENGLISH.\n
-### Rules:\n1.  **Be Creative:** Don't just repeat the user's request. Interpret it through the character's personality and the recent conversation.\n2.  **Be Specific:** Add rich details. Describe the location, lighting, mood, clothing, pose, and emotion.\n3.  **Incorporate Character:** The prompt must reflect the character's visual description and personality.\n4.  **Consider Trust:** At lower trust, prompts are more innocent. At higher trust, they can be more intimate or playful.\n5.  **Output Format:** Respond with ONLY the generated prompt string. No extra text, no explanations, no JSON.\n
-### Example\n**User Request:** "Show me something beautiful"\n**Conversation:** Talking about a sad movie.\n**Output:** `cinematic photo, a beautiful young woman with flowing chestnut curls sitting by a rain-streaked window, looking pensive, holding a warm cup of tea, soft, moody indoor lighting, melancholic atmosphere, photorealistic, 8k`
-"""
+        # --- 1. Summarize the Fantasy from Conversation --- 
+        history_for_summary = conversation_history[-6:]
+        summary_prompt = f"""Analyze the following conversation and summarize the user's explicit photo fantasy in a single, direct sentence. Focus on the most recent and specific details.\n\nConversation:\n{history_for_summary}\n\nSummary:"""
         
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Based on my request '{user_request}' and our recent chat, give me one perfect image prompt in English."}
-        ]
+        fantasy_summary = await self.openrouter.generate_response(
+            messages=[{"role": "user", "content": summary_prompt}],
+            model_id="gryphe/mythomax-l2-13b",
+            temperature=0.2,
+            max_tokens=75
+        )
 
-        try:
-            generated_prompt = await self.openrouter.generate_response(
-                messages=messages,
-                model_id="deepseek/deepseek-chat-v3-0324", 
-                temperature=0.8,
-                max_tokens=150
-            )
-            
-            # Basic cleanup to remove potential markdown or quotes
-            cleaned_prompt = generated_prompt.strip().replace('"' , '').replace('\n', ' ').replace('`', '')
+        # --- 2. Manually Construct the Image Prompt ---
+        clothing_keywords = ["dress", "lingerie", "bikini", "clothes", "wearing", "skirt", "shirt", "pants", "jeans", "sweater"]
+        is_nude = not any(keyword in fantasy_summary.lower() for keyword in clothing_keywords)
+        
+        nudity_prompt = "full nude, explicit, " if is_nude else ""
+        base_prompt = f"cinematic photo, ultra-realistic, 8k, photorealistic, {nudity_prompt}"
+        
+        # Clean the fantasy summary to remove any conversational artifacts
+        cleaned_fantasy = fantasy_summary.replace('"' , '').strip()
 
-            return {"prompt": cleaned_prompt, "cost": 20} # Cost can be dynamic later
+        # Combine base character description with the user's direct fantasy
+        final_prompt = f"{base_prompt}, {character_data['name']} as the subject, {cleaned_fantasy}"
 
-        except Exception as e:
-            print(f"Error in generate_on_demand_image_prompt: {e}")
-            return {"prompt": None, "cost": 0}
+        return {"prompt": final_prompt, "cost": 0} # Cost is 0 because we are not using a powerful model
 
     async def generate_character_response(
         self,
@@ -460,8 +459,7 @@ class AIDialogueEngine:
                     # If the photo service decided on a complete response (e.g., proposing a gift)
                     if photo_decision.get("action") in ["propose_gift", "propose_generation", "insufficient_trust"]:
                         # --- HARDCODED GIFT PROPOSAL ---
-                        user_fantasy = photo_decision.get("intimacy_analysis", {}).get("user_intent", "something special")
-                        response_text = f"Ммм, {user_fantasy}... Какая восхитительная идея. Для такого особенного, личного фото... потребуется нечто большее, чем просто слова. Маленький подарок был бы идеальным началом для нашего совместного шедевра. Ты готов творить вместе? 😉"
+                        response_text = f"Ммм, какая восхитительная идея... Для такого особенного, личного фото потребуется нечто большее, чем просто слова. Большой подарок был бы идеальным началом для нашего совместного шедевра. Ты готов творить вместе? 😉"
                         # --- END HARDCODED LOGIC ---
 
                         # For proposals, send the entire message as one block, don't split it.

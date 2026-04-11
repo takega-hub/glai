@@ -238,6 +238,7 @@ async def send_gift(
             from api.tasks import generate_and_send_photo_task
             background_tasks.add_task(
                 generate_and_send_photo_task,
+                db,
                 character_id=request.character_id,
                 user_id=current_user["user_id"],
                 photo_id=photo_id,
@@ -481,3 +482,23 @@ async def get_history(character_id: uuid.UUID, current_user=Depends(get_current_
             current_layer=user_state["current_layer"] or 0, 
             character_info=dict(character_info)
         )
+
+@router.get("/characters/{character_id}/personal-gallery")
+async def get_personal_gallery(character_id: uuid.UUID, current_user=Depends(get_current_user)):
+    import os
+    user_id = current_user["user_id"]
+    gallery_dir = f"uploads/{character_id}/Personal/{user_id}"
+    
+    if not os.path.exists(gallery_dir) or not os.path.isdir(gallery_dir):
+        return []
+
+    try:
+        # Get all file paths and sort them by modification time (newest first)
+        files = [os.path.join(gallery_dir, f) for f in os.listdir(gallery_dir)]
+        files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
+        
+        # Return the web-accessible paths
+        return [f"/{f}" for f in files]
+    except Exception as e:
+        print(f"!!! Error reading personal gallery for user {user_id}: {e} !!!")
+        raise HTTPException(status_code=500, detail="Could not retrieve personal gallery.")

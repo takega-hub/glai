@@ -7,6 +7,36 @@ import aiofiles
 from api.services.comfy_service import ComfyService
 from api.services.ai_dialogue_v2 import AIDialogueEngine
 from api.services.image_generator import OpenRouterImageGenerator
+from PIL import Image
+import io
+
+async def _optimize_and_save_image(image_bytes: bytes, character_id: uuid.UUID, user_id: uuid.UUID, photo_id: uuid.UUID) -> str:
+    """Optimizes and saves the image to the correct folder structure."""
+    try:
+        img = Image.open(io.BytesIO(image_bytes))
+        
+        # Optimize and convert to WEBP for better performance
+        output_buffer = io.BytesIO()
+        img.save(output_buffer, 'WEBP', quality=85)
+        optimized_bytes = output_buffer.getvalue()
+
+        upload_dir = f"uploads/{character_id}/Personal/{user_id}"
+        os.makedirs(upload_dir, exist_ok=True)
+        file_path = os.path.join(upload_dir, f"{photo_id}.webp")
+        
+        async with aiofiles.open(file_path, 'wb') as out_file:
+            await out_file.write(optimized_bytes)
+        
+        return f"/{file_path}"
+    except Exception as e:
+        print(f"!!! ERROR in image optimization/saving: {e} !!!")
+        # Fallback to saving the original image if optimization fails
+        upload_dir = f"uploads/{character_id}/Personal/{user_id}"
+        os.makedirs(upload_dir, exist_ok=True)
+        file_path = os.path.join(upload_dir, f"{photo_id}.png")
+        async with aiofiles.open(file_path, 'wb') as out_file:
+            await out_file.write(image_bytes)
+        return f"/{file_path}"
 
 
 # --- Helper Function (used by unlock_and_generate_photo_task) ---
@@ -171,8 +201,7 @@ async def generate_and_send_photo_task(db, character_id: uuid.UUID, user_id: uui
             with open(face_image_path, "rb") as f:
                 face_image_bytes = f.read()
 
-        enhanced_english_prompt = await dialogue_engine.enhance_image_prompt(user_prompt)
-        final_prompt = f"{base_description_text}, {enhanced_english_prompt}"
+        final_prompt = f"{base_description_text}, {user_prompt}"
 
         generated_image_bytes = await comfy_service.generate_image_with_face(text_prompt=final_prompt, face_image_bytes=face_image_bytes)
 
@@ -180,17 +209,18 @@ async def generate_and_send_photo_task(db, character_id: uuid.UUID, user_id: uui
             print("On-demand image generation failed.")
             return
 
-        upload_dir = "uploads/generated_photos"
-        os.makedirs(upload_dir, exist_ok=True)
-        file_path = os.path.join(upload_dir, f"{photo_id}.jpg")
-        
-        async with aiofiles.open(file_path, 'wb') as out_file:
-            await out_file.write(generated_image_bytes)
-        
-        image_url = f"/{file_path}"
+        image_url = await _optimize_and_save_image(generated_image_bytes, character_id, user_id, photo_id)
 
+        # Real-time delivery via WebSocket
+        from api.main import manager
+        response_text = "Я сделала это фото специально для тебя, по твоей просьбе. Как тебе?"
+        await manager.send_personal_message(
+            {"response": response_text, "image_url": image_url},
+            user_id
+        )
+
+        # Also save to DB for history
         async with db.acquire() as connection:
-            response_text = "Я сделала это фото специально для тебя, по твоей просьбе. Как тебе?"
             await connection.execute(
                 "INSERT INTO messages (character_id, user_id, response, image_url, created_at) VALUES ($1, $2, $3, $4, NOW())",
                 character_id, user_id, response_text, image_url

@@ -113,7 +113,38 @@ const UserChat = () => {
 
     fetchBalance();
 
-  }, [characterId]);
+    // --- WebSocket Connection ---
+    if (user?.id) {
+      const wsUrl = `ws://localhost:8000/ws/${user.id}`;
+      const ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        console.log("WebSocket connection established");
+      };
+
+      ws.onmessage = (event) => {
+        const messageData = JSON.parse(event.data);
+        const newMessage: Message = {
+          id: `ws-${Date.now()}`,
+          text: messageData.response,
+          sender: 'assistant',
+          timestamp: new Date(),
+          imageUrl: messageData.image_url,
+        };
+        setMessages(prev => [...prev, newMessage]);
+      };
+
+      ws.onclose = () => {
+        console.log("WebSocket connection closed");
+      };
+
+      // Cleanup on component unmount
+      return () => {
+        ws.close();
+      };
+    }
+
+  }, [characterId, user?.id]);
 
   useEffect(() => {
     scrollToBottom();

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { getCharacterById, getContentGallery } from '../../api/userApiClient';
+import { getCharacterById, getContentGallery, getPersonalGallery } from '../../api/userApiClient';
 import { Character, ContentItem } from '../../types/user';
 import { MessageCircle, Image, Video, Lock, Eye } from 'lucide-react';
 
@@ -8,6 +8,8 @@ const CharacterProfile = () => {
   const { characterId } = useParams<{ characterId: string }>();
   const [character, setCharacter] = useState<Character | null>(null);
   const [content, setContent] = useState<ContentItem[]>([]);
+  const [personalContent, setPersonalContent] = useState<string[]>([]);
+  const [activeTab, setActiveTab] = useState('public');
   const [loading, setLoading] = useState(true);
   const [selectedContent, setSelectedContent] = useState<ContentItem | null>(null);
 
@@ -24,6 +26,11 @@ const CharacterProfile = () => {
           if (data && Array.isArray(data.content)) {
             console.log('Content gallery data:', data);
             setContent(data.content);
+          }
+
+          const personalContentResponse = await getPersonalGallery(characterId);
+          if (personalContentResponse.data && Array.isArray(personalContentResponse.data)) {
+            setPersonalContent(personalContentResponse.data);
           }
         } catch (error) {
           console.error("Error fetching data:", error);
@@ -91,66 +98,122 @@ const CharacterProfile = () => {
         
         {/* Content Gallery will go here */}
         <div className="mt-12">
-          <h2 className="text-3xl font-bold mb-6">Gallery</h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {content.map((item) => (
-              <div
-                key={item.id}
-                onClick={() => !item.is_locked && setSelectedContent(item)}
-                className={`relative aspect-square rounded-xl overflow-hidden group transition-all duration-300 ${
-                  !item.is_locked 
-                    ? 'cursor-pointer hover:scale-105 hover:shadow-2xl' 
-                    : 'cursor-not-allowed'
-                }`}
-              >
-                {/* Image or Placeholder */}
-                <img
-                  src={item.thumbnail_url || item.media_url}
-                  alt={item.description || 'Content'}
-                  className={`w-full h-full object-cover`}
-                  onError={(e) => {
-                    const target = e.target as HTMLImageElement;
-                    if (target.src !== item.media_url) {
-                      target.src = item.media_url;
-                    } else if (target.src !== item.url) {
-                      target.src = item.url;
-                    }
-                  }}
-                />
-
-                {/* Locked Overlay */}
-                {item.is_locked && (
-                  <div className="absolute inset-0 bg-black/20 backdrop-blur-md flex flex-col items-center justify-center p-2">
-                    <Lock className="w-8 h-8 text-white/70 mb-2" />
-                    <p className="text-white/90 text-xs font-medium text-center">{item.unlock_requirement}</p>
-                  </div>
-                )}
-
-                {/* Unlocked Hover Icon */}
-                {!item.is_locked && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                    <Eye className="w-8 h-8 text-white" />
-                  </div>
-                )}
-
-                {/* Content Type Icon */}
-                <div className="absolute top-2 left-2 bg-black bg-opacity-50 rounded-full p-1">
-                  {item.type === 'photo' ? (
-                    <Image className="w-4 h-4 text-white" />
-                  ) : (
-                    <Video className="w-4 h-4 text-white" />
-                  )}
-                </div>
-              </div>
-            ))}
+          <div className="flex border-b border-white/10 mb-6">
+            <button 
+              onClick={() => setActiveTab('public')}
+              className={`px-6 py-3 text-lg font-medium transition-colors ${
+                activeTab === 'public' 
+                  ? 'text-white border-b-2 border-purple-500' 
+                  : 'text-purple-300 hover:text-white'
+              }`}>
+              Gallery
+            </button>
+            <button 
+              onClick={() => setActiveTab('private')}
+              className={`px-6 py-3 text-lg font-medium transition-colors ${
+                activeTab === 'private' 
+                  ? 'text-white border-b-2 border-purple-500' 
+                  : 'text-purple-300 hover:text-white'
+              }`}>
+              Private Gallery
+            </button>
           </div>
-          {content.length === 0 && (
-            <div className="text-center py-12">
-              <div className="w-16 h-16 bg-purple-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Image className="w-8 h-8 text-purple-400" />
+
+          {activeTab === 'public' && (
+            <div>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {content.map((item) => (
+                  <div
+                    key={item.id}
+                    onClick={() => !item.is_locked && setSelectedContent(item)}
+                    className={`relative aspect-square rounded-xl overflow-hidden group transition-all duration-300 ${
+                      !item.is_locked 
+                        ? 'cursor-pointer hover:scale-105 hover:shadow-2xl' 
+                        : 'cursor-not-allowed'
+                    }`}
+                  >
+                    {/* Image or Placeholder */}
+                    <img
+                      src={item.thumbnail_url || item.media_url}
+                      alt={item.description || 'Content'}
+                      className={`w-full h-full object-cover`}
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        if (target.src !== item.media_url) {
+                          target.src = item.media_url;
+                        } else if (target.src !== item.url) {
+                          target.src = item.url;
+                        }
+                      }}
+                    />
+
+                    {/* Locked Overlay */}
+                    {item.is_locked && (
+                      <div className="absolute inset-0 bg-black/20 backdrop-blur-md flex flex-col items-center justify-center p-2">
+                        <Lock className="w-8 h-8 text-white/70 mb-2" />
+                        <p className="text-white/90 text-xs font-medium text-center">{item.unlock_requirement}</p>
+                      </div>
+                    )}
+
+                    {/* Unlocked Hover Icon */}
+                    {!item.is_locked && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                        <Eye className="w-8 h-8 text-white" />
+                      </div>
+                    )}
+
+                    {/* Content Type Icon */}
+                    <div className="absolute top-2 left-2 bg-black bg-opacity-50 rounded-full p-1">
+                      {item.type === 'photo' ? (
+                        <Image className="w-4 h-4 text-white" />
+                      ) : (
+                        <Video className="w-4 h-4 text-white" />
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
-              <h3 className="text-xl font-semibold text-white mb-2">Content not found</h3>
-              <p className="text-purple-300">There is no available content for this character yet</p>
+              {content.length === 0 && (
+                <div className="text-center py-12">
+                  <div className="w-16 h-16 bg-purple-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Image className="w-8 h-8 text-purple-400" />
+                  </div>
+                  <h3 className="text-xl font-semibold text-white mb-2">Content not found</h3>
+                  <p className="text-purple-300">There is no available content for this character yet</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'private' && (
+            <div>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {personalContent.map((imgUrl, index) => (
+                  <div
+                    key={index}
+                    onClick={() => setSelectedContent({ id: `private-${index}`, url: imgUrl, type: 'photo', is_locked: false, media_url: imgUrl, thumbnail_url: imgUrl, description: 'Personal Photo', unlock_requirement: '', title: 'Personal Photo', trust_level_required: 0 })}
+                    className="relative aspect-square rounded-xl overflow-hidden group transition-all duration-300 cursor-pointer hover:scale-105 hover:shadow-2xl"
+                  >
+                    <img
+                      src={imgUrl}
+                      alt="Personal Content"
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                      <Eye className="w-8 h-8 text-white" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {personalContent.length === 0 && (
+                <div className="text-center py-12">
+                  <div className="w-16 h-16 bg-purple-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Image className="w-8 h-8 text-purple-400" />
+                  </div>
+                  <h3 className="text-xl font-semibold text-white mb-2">No Personal Photos Yet</h3>
+                  <p className="text-purple-300">Engage with the character in chat to generate unique photos!</p>
+                </div>
+              )}
             </div>
           )}
         </div>
