@@ -1,4 +1,5 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
+import { GoogleOAuthProvider } from '@react-oauth/google';
 import UserLayout from './components/user/UserLayout';
 import UserDashboard from './pages/user/UserDashboard';
 import UserChat from './pages/user/UserChat';
@@ -19,30 +20,32 @@ const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
 
 function UserApp() {
   return (
-    <Routes>
-      <Route path="auth" element={<AuthPage />} />
-      <Route 
-        path="/"
-        element={
-          <ProtectedRoute>
-            <UserLayout />
-          </ProtectedRoute>
-        }
-      >
-        <Route index element={<UserDashboard />} />
-        <Route path="profile" element={<UserProfile />} />
-        <Route path="favorites" element={<FavoritesPage />} />
-        <Route path="character/:characterId" element={<CharacterProfile />} />
-      </Route>
-      <Route 
-        path="/chat/:characterId"
-        element={
-          <ProtectedRoute>
-            <UserChat />
-          </ProtectedRoute>
-        }
-      />
-    </Routes>
+    <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID || ''}>
+      <Routes>
+        <Route path="auth" element={<AuthPage />} />
+        <Route 
+          path="/"
+          element={
+            <ProtectedRoute>
+              <UserLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route index element={<UserDashboard />} />
+          <Route path="profile" element={<UserProfile />} />
+          <Route path="favorites" element={<FavoritesPage />} />
+          <Route path="character/:characterId" element={<CharacterProfile />} />
+        </Route>
+        <Route 
+          path="/chat/:characterId"
+          element={
+            <ProtectedRoute>
+              <UserChat />
+            </ProtectedRoute>
+          }
+        />
+      </Routes>
+    </GoogleOAuthProvider>
   );
 }
 

@@ -42,6 +42,10 @@ const UserChat = () => {
   const [photoProposal, setPhotoProposal] = useState<any | null>(null);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [guestMessageCount, setGuestMessageCount] = useState(() => {
+    const storedCount = localStorage.getItem('guestMessageCount');
+    return storedCount ? parseInt(storedCount, 10) : 0;
+  });
 
 
 
@@ -115,7 +119,8 @@ const UserChat = () => {
 
     // --- WebSocket Connection ---
     if (user?.id) {
-      const wsUrl = `ws://localhost:8000/ws/${user.id}`;
+      const wsBaseUrl = import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:8002/ws';
+      const wsUrl = `${wsBaseUrl}/${user.id}`;
       const ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {
@@ -166,7 +171,19 @@ const UserChat = () => {
   };
 
   const sendMessage = async () => {
+    if (user?.is_guest && guestMessageCount >= 5) {
+      alert('You have reached the message limit for guest users. Please register to continue chatting.');
+      navigate('/user/auth');
+      return;
+    }
+
     if (inputMessage.trim() && characterId) {
+      if (user?.is_guest) {
+        const newCount = guestMessageCount + 1;
+        setGuestMessageCount(newCount);
+        localStorage.setItem('guestMessageCount', newCount.toString());
+      }
+
       const userMessage: Message = {
         id: `user-${Date.now()}`,
         text: inputMessage,
@@ -181,14 +198,8 @@ const UserChat = () => {
         const response = await sendApiMessage(characterId, messageToSend);
         const characterResponse = response.data;
 
-      // Update trust score and layer if provided
+        // Update trust score and layer if provided
         if (characterResponse.new_trust_score !== undefined && character) {
-          console.log('Updating trust from message:', {
-            oldTrust: character.trust_score,
-            newTrust: characterResponse.new_trust_score,
-            oldLayer: character.current_layer,
-            newLayer: characterResponse.new_layer
-          });
           setCharacter({ 
             ...character, 
             trust_score: characterResponse.new_trust_score,
@@ -197,7 +208,6 @@ const UserChat = () => {
         }
 
         const allParts = [characterResponse.response, ...(characterResponse.response_parts || [])];
-
         const responseBaseId = `ai-response-${Date.now()}`;
 
         for (let i = 0; i < allParts.length; i++) {
