@@ -7,9 +7,11 @@ from google.auth.transport import requests
 from pydantic import ValidationError
 from api.auth.oauth_models import OAuthUserInfo, GoogleAuthRequest, AppleAuthRequest
 
+from decouple import config
+
 class OAuthService:
     def __init__(self):
-        self.google_client_id = "YOUR_GOOGLE_CLIENT_ID"  # Замените на ваш реальный client ID
+        self.google_client_id = config("GOOGLE_CLIENT_ID", default="")
         
     async def verify_google_token(self, id_token_string: str) -> OAuthUserInfo:
         """Verify Google ID token and extract user information"""

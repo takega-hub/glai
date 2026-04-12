@@ -1,8 +1,20 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User, Lock, Mail, Sparkles } from 'lucide-react';
+import { GoogleLogin, CredentialResponse } from '@react-oauth/google';
+import { webAuthService } from '../../services/webAuthService';
 import { useAuthStore } from '../../store/authStore';
-import { login, register, loginAsGuest } from '../../api/userApiClient';
+
+// Apple Sign-In is not available in browsers outside of Safari.
+// We will use a placeholder for now.
+const AppleSignInButton = ({ onClick }: { onClick: () => void }) => (
+  <button 
+    onClick={onClick}
+    className="w-full flex items-center justify-center space-x-3 bg-black/30 text-white py-3 px-4 rounded-xl hover:bg-black/50 transition-all duration-300 border border-white/20">
+    <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor"><path d="M12.15,2.5a9.65,9.65,0,0,0-7,11.87,9.43,9.43,0,0,0,4.29,4.78,1,1,0,0,0,1.21-.19,1,1,0,0,0-.19-1.21,7.5,7.5,0,0,1-3.23-4,7.62,7.62,0,0,1,6.86-8.3,7.49,7.49,0,0,1,8,6.85,1,1,0,0,0,1,.88,1,1,0,0,0,1-1.09,9.6,9.6,0,0,0-10.7-8.7Zm.29,8.37a1,1,0,0,0-1.41,0,1,1,0,0,0,0,1.41,3.42,3.42,0,0,0,1.41,1,1,1,0,0,0,0-1.41,1.4,1.4,0,0,0-1-1Zm-2.6,3.18a1,1,0,0,0-1.41,0,1,1,0,0,0,0,1.41,3.42,3.42,0,0,0,1.41,1,1,1,0,0,0,0-1.41,1.4,1.4,0,0,0-1-1Zm5.2,0a1,1,0,0,0-1.41,0,1,1,0,0,0,0,1.41,3.42,3.42,0,0,0,1.41,1,1,1,0,0,0,0-1.41,1.4,1.4,0,0,0-1-1Zm-2.6-3.18a1,1,0,0,0-1.41,0,1,1,0,0,0,0,1.41,3.42,3.42,0,0,0,1.41,1,1,1,0,0,0,0-1.41,1.4,1.4,0,0,0-1-1Z"/></svg>
+    <span>Continue with Apple ID</span>
+  </button>
+);
 
 const AuthPage = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -11,21 +23,65 @@ const AuthPage = () => {
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const setAuth = useAuthStore((state) => state.setAuth);
   const navigate = useNavigate();
+
+  const handleGoogleSuccess = async (credentialResponse: CredentialResponse) => {
+    if (credentialResponse.credential) {
+        setLoading(true);
+        setError(null);
+        try {
+            await webAuthService.loginWithGoogle(credentialResponse.credential);
+            navigate('/user');
+        } catch (err: any) {
+            setError(err.response?.data?.detail || 'Google Sign-In failed');
+        } finally {
+            setLoading(false);
+        }
+    } else {
+        setError('Google Sign-In failed: No credential received');
+    }
+  };
+
+  const handleAppleLogin = async () => {
+    try {
+      const data = await AppleID.auth.signIn();
+      const { authorization, user } = data;
+
+      if (authorization && authorization.id_token) {
+        setLoading(true);
+        setError(null);
+
+        const fullName = user ? `${user.name.firstName} ${user.name.lastName}` : null;
+        const email = user ? user.email : null;
+
+        try {
+          await webAuthService.loginWithApple(authorization.id_token, fullName, email);
+          navigate('/user');
+        } catch (err: any) {
+          setError(err.response?.data?.detail || 'Apple Sign-In failed on backend');
+        } finally {
+          setLoading(false);
+        }
+      } else {
+        setError('Apple Sign-In failed: No authorization token received.');
+      }
+    } catch (error) {
+      setError('Apple Sign-In was canceled or failed.');
+      console.error(error);
+    }
+  };
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
     try {
-      const response = isLogin 
-        ? await login({ email, password }) 
-        : await register({ email, password, username: name });
-      if (response.data.access_token && response.data.user) {
-        setAuth(response.data.access_token, response.data.user);
-        navigate('/user');
+      if (isLogin) {
+        await webAuthService.login(email, password);
+      } else {
+        await webAuthService.register(email, password, name);
       }
+      navigate('/user');
     } catch (err: any) {
       setError(err.response?.data?.detail || 'An error occurred');
     } finally {
@@ -34,19 +90,16 @@ const AuthPage = () => {
   };
 
   const handleGuestAuth = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await loginAsGuest();
-      if (response.data.access_token && response.data.user) {
-        setAuth(response.data.access_token, response.data.user);
-        navigate('/user');
+      setLoading(true);
+      setError(null);
+      try {
+          await webAuthService.loginAsGuest();
+          navigate('/user');
+      } catch (err: any) {
+          setError(err.response?.data?.detail || 'Failed to log in as guest');
+      } finally {
+          setLoading(false);
       }
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to log in as guest');
-    } finally {
-      setLoading(false);
-    }
   };
 
   const toggleAuthMode = () => {
@@ -71,14 +124,17 @@ const AuthPage = () => {
           </div>
 
           <div className="space-y-4 mb-6">
-            <button className="w-full flex items-center justify-center space-x-3 bg-black/30 text-white py-3 px-4 rounded-xl hover:bg-black/50 transition-all duration-300 border border-white/20">
-              <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor"><path d="M12.15,2.5a9.65,9.65,0,0,0-7,11.87,9.43,9.43,0,0,0,4.29,4.78,1,1,0,0,0,1.21-.19,1,1,0,0,0-.19-1.21,7.5,7.5,0,0,1-3.23-4,7.62,7.62,0,0,1,6.86-8.3,7.49,7.49,0,0,1,8,6.85,1,1,0,0,0,1,.88,1,1,0,0,0,1-1.09,9.6,9.6,0,0,0-10.7-8.7Zm.29,8.37a1,1,0,0,0-1.41,0,1,1,0,0,0,0,1.41,3.42,3.42,0,0,0,1.41,1,1,1,0,0,0,0-1.41,1.4,1.4,0,0,0-1-1Zm-2.6,3.18a1,1,0,0,0-1.41,0,1,1,0,0,0,0,1.41,3.42,3.42,0,0,0,1.41,1,1,1,0,0,0,0-1.41,1.4,1.4,0,0,0-1-1Zm5.2,0a1,1,0,0,0-1.41,0,1,1,0,0,0,0,1.41,3.42,3.42,0,0,0,1.41,1,1,1,0,0,0,0-1.41,1.4,1.4,0,0,0-1-1Zm-2.6-3.18a1,1,0,0,0-1.41,0,1,1,0,0,0,0,1.41,3.42,3.42,0,0,0,1.41,1,1,1,0,0,0,0-1.41,1.4,1.4,0,0,0-1-1Z"/></svg>
-              <span>Continue with Apple ID</span>
-            </button>
-            <button className="w-full flex items-center justify-center space-x-3 bg-white/90 text-slate-800 py-3 px-4 rounded-xl hover:bg-white transition-all duration-300 font-semibold">
-              <svg className="w-5 h-5" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"/><path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z"/><path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.222,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z"/><path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571l6.19,5.238C39.901,36.626,44,30.638,44,24C44,22.659,43.862,21.35,43.611,20.083z"/></svg>
-              <span>Continue with Google</span>
-            </button>
+            <AppleSignInButton onClick={handleAppleLogin} />
+            <GoogleLogin
+              onSuccess={handleGoogleSuccess}
+              onError={() => {
+                setError('Google Sign-In was canceled or failed');
+              }}
+              theme="outline"
+              size="large"
+              shape="pill"
+              width="100%"
+            />
           </div>
 
           <div className="flex items-center justify-center space-x-4 my-6">
@@ -102,7 +158,7 @@ const AuthPage = () => {
                   placeholder="Name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  required
+                  required={!isLogin}
                   className="w-full bg-white/10 border border-white/20 rounded-xl py-3 pl-12 pr-4 text-white placeholder-purple-300/70 focus:outline-none focus:ring-2 focus:ring-purple-400 transition-all"
                 />
               </div>

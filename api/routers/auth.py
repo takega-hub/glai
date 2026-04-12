@@ -23,6 +23,7 @@ class UserResponse(BaseModel):
     role: str
     created_at: datetime
     tokens: int = 0
+    is_guest: bool = False
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -228,7 +229,7 @@ async def google_auth(request: GoogleAuthRequest, db=Depends(get_db)):
         )
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_ERROR,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Google authentication error: {str(e)}"
         )
 
@@ -270,4 +271,36 @@ async def apple_auth(request: AppleAuthRequest, db=Depends(get_db)):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_ERROR,
             detail=f"Apple authentication error: {str(e)}"
+        )
+
+@router.post("/guest", response_model=TokenResponse)
+async def guest_login(db=Depends(get_db)):
+    """Create a temporary guest user and return a token."""
+    guest_uuid = uuid.uuid4()
+    guest_email = f"guest_{guest_uuid}@example.com"
+
+    query = """
+    INSERT INTO users (email, role, created_at, tokens, is_guest, display_name)
+    VALUES ($1, 'app_user', NOW(), 10, TRUE, 'Guest')
+    RETURNING id, email, role, created_at, tokens, is_guest
+    """
+
+    try:
+        guest_user = await db.fetchrow(query, guest_email)
+        if not guest_user:
+            raise HTTPException(status_code=500, detail="Could not create guest user.")
+
+        token_data = signJWT(str(guest_user['id']), guest_user['role'])
+        
+        user_data_dict = dict(guest_user)
+        user_data_dict['created_at'] = str(user_data_dict['created_at'])
+
+        return TokenResponse(
+            access_token=token_data['access_token'],
+            user=UserResponse(**user_data_dict)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error creating guest user: {str(e)}"
         )

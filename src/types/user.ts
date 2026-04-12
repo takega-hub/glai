@@ -4,6 +4,7 @@ export interface User {
   name: string;
   email: string;
   avatar?: string;
+  is_guest?: boolean; // Add is_guest property
 }
 
 export interface UserProfile {
