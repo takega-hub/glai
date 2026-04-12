@@ -102,3 +102,7 @@ async def shutdown_event():
 @app.get("/")
 def read_root():
     return {"message": "Welcome to EVA AI Backend"}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
