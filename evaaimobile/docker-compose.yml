@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:13
+    container_name: eva_ai_db
+    volumes:
+      - /fast_data/eva_ai/postgres:/var/lib/postgresql/data  # bind mount вместо volume
+    environment:
+      - POSTGRES_DB=eva_ai
+      - POSTGRES_USER=glai
+      - POSTGRES_PASSWORD=opexoboe140546
+      - POSTGRES_HOST_AUTH_METHOD=trust
+    ports:
+      - "5432:5432"
+    networks:
+      - eva_ai_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U glai -d eva_ai"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped  # Автоматический перезапуск
+
+  redis:
+    image: redis:6
+    container_name: eva_ai_redis
+    ports:
+      - "6379:6379"
+    networks:
+      - eva_ai_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    container_name: eva_ai_api
+    env_file:
+      - ./api/.env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8002:8002"
+    networks:
+      - eva_ai_network
+    restart: unless-stopped
+
+networks:
+  eva_ai_network:
+    driver: bridge

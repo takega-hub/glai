@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "module": "esnext",
+    "moduleResolution": "node",
+    "noEmit": false,
+    "allowImportingTsExtensions": false,
+    "allowSyntheticDefaultImports": true
+  },
+  "include": ["src/utils/imageOptimizer.ts", "src/utils/uploadOptimizer.ts", "scripts/optimize-existing-photos.js", "scripts/optimize-photos.js"]
+}

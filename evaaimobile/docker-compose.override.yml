@@ -1,0 +1,16 @@
+
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: eva_ai_frontend
+    ports:
+      - "8081:80"
+      - "8444:443"
+    networks:
+      - eva_ai_network
+    depends_on:
+      - api
