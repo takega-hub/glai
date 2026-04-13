@@ -1,1 +1,0 @@
-ALTER TABLE reference_photos ADD COLUMN updated_at TIMESTAMPTZ DEFAULT NOW();
