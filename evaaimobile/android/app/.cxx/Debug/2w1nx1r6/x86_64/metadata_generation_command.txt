@@ -1,0 +1,26 @@
+                        -HC:\APPS\EVA_AI\evaaimobile\node_modules\react-native\ReactAndroid\cmake-utils\default-app-setup
+-DCMAKE_SYSTEM_NAME=Android
+-DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+-DCMAKE_SYSTEM_VERSION=24
+-DANDROID_PLATFORM=android-24
+-DANDROID_ABI=x86_64
+-DCMAKE_ANDROID_ARCH_ABI=x86_64
+-DANDROID_NDK=C:\Users\takeg\AppData\Local\Android\Sdk\ndk\27.1.12297006
+-DCMAKE_ANDROID_NDK=C:\Users\takeg\AppData\Local\Android\Sdk\ndk\27.1.12297006
+-DCMAKE_TOOLCHAIN_FILE=C:\Users\takeg\AppData\Local\Android\Sdk\ndk\27.1.12297006\build\cmake\android.toolchain.cmake
+-DCMAKE_MAKE_PROGRAM=C:\Users\takeg\AppData\Local\Android\Sdk\cmake\3.22.1\bin\ninja.exe
+-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=C:\APPS\EVA_AI\evaaimobile\android\app\build\intermediates\cxx\Debug\2w1nx1r6\obj\x86_64
+-DCMAKE_RUNTIME_OUTPUT_DIRECTORY=C:\APPS\EVA_AI\evaaimobile\android\app\build\intermediates\cxx\Debug\2w1nx1r6\obj\x86_64
+-DCMAKE_BUILD_TYPE=Debug
+-DCMAKE_FIND_ROOT_PATH=C:\APPS\EVA_AI\evaaimobile\android\app\.cxx\Debug\2w1nx1r6\prefab\x86_64\prefab
+-BC:\APPS\EVA_AI\evaaimobile\android\app\.cxx\Debug\2w1nx1r6\x86_64
+-GNinja
+-DANDROID_LTO=off
+-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF
+-DPROJECT_BUILD_DIR=C:\APPS\EVA_AI\evaaimobile\android\app\build
+-DPROJECT_ROOT_DIR=C:\APPS\EVA_AI\evaaimobile\android
+-DREACT_ANDROID_DIR=C:\APPS\EVA_AI\evaaimobile\node_modules\react-native\ReactAndroid
+-DANDROID_STL=c++_shared
+-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON
+                        Build command args: []
+                        Version: 2

@@ -22,14 +22,13 @@ const getChatHistory = async (characterId) => {
 const sendMessage = async (characterId, message) => {
   try {
     const headers = await getAuthHeaders();
-    const formData = new FormData();
-    formData.append("character_id", characterId);
-    formData.append("message", message);
-
-    const response = await axios.post(`${API_URL}/send-message`, formData, {
+    const response = await axios.post(`${API_URL}/send-message`, {
+      character_id: characterId,
+      message: message
+    }, {
       headers: {
         ...headers,
-        "Content-Type": "multipart/form-data",
+        "Content-Type": "application/json",
       },
     });
     return response.data;

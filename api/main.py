@@ -16,6 +16,8 @@ app = FastAPI()
 # CORS Middleware
 origins = [
     "http://admin-eva.midoma.ru:5173",
+    "https://admin-eva.midoma.ru",
+    "https://eva.midoma.ru",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
 ]

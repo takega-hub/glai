@@ -3,24 +3,21 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import { appleAuth } from "@invertase/react-native-apple-authentication";
 
-const API_URL = "https://eva.midoma.ru/api/auth";
+const API_URL = "https://eva.midoma.ru/api";
 
-// Configure Google Sign-In
-GoogleSignin.configure({
-  webClientId: "YOUR_GOOGLE_WEB_CLIENT_ID", // Замените на ваш реальный client ID
-  iosClientId: "YOUR_IOS_CLIENT_ID", // для iOS
-  androidClientId: "YOUR_ANDROID_CLIENT_ID", // для Android
-  offlineAccess: false,
-});
+// ...
 
 const login = async (email, password) => {
   try {
-    const response = await axios.post(`${API_URL}/token`, {
-      username: email,
-      password,
-    }, {
+    // Используем URLSearchParams и явно переводим в строку для корректной передачи в RN
+    const params = new URLSearchParams();
+    params.append('username', email);
+    params.append('password', password);
+
+    const response = await axios.post(`${API_URL}/auth/token`, params.toString(), {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json',
       }
     });
     
@@ -45,7 +42,7 @@ const loginWithGoogle = async () => {
     
     if (userInfo.idToken) {
       // Send token to backend
-      const response = await axios.post(`${API_URL}/google`, {
+      const response = await axios.post(`${API_URL}/auth/google`, {
         id_token: userInfo.idToken,
       });
       
@@ -84,7 +81,7 @@ const loginWithApple = async () => {
     
     if (credentialState === appleAuth.State.AUTHORIZED) {
       // Send token to backend
-      const response = await axios.post(`${API_URL}/apple`, {
+      const response = await axios.post(`${API_URL}/auth/apple`, {
         identity_token: appleAuthRequestResponse.identityToken,
         full_name: appleAuthRequestResponse.fullName 
           ? `${appleAuthRequestResponse.fullName.givenName} ${appleAuthRequestResponse.fullName.familyName}`.trim()

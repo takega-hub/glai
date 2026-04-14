@@ -1,0 +1,15 @@
+C:/APPS/EVA_AI/evaaimobile/android/app/.cxx/Debug/2w1nx1r6/x86/CMakeFiles/appmodules.dir
+C:/APPS/EVA_AI/evaaimobile/android/app/.cxx/Debug/2w1nx1r6/x86/CMakeFiles/edit_cache.dir
+C:/APPS/EVA_AI/evaaimobile/android/app/.cxx/Debug/2w1nx1r6/x86/CMakeFiles/rebuild_cache.dir
+C:/APPS/EVA_AI/evaaimobile/android/app/.cxx/Debug/2w1nx1r6/x86/AsyncStorageSpec_autolinked_build/CMakeFiles/react_codegen_AsyncStorageSpec.dir
+C:/APPS/EVA_AI/evaaimobile/android/app/.cxx/Debug/2w1nx1r6/x86/AsyncStorageSpec_autolinked_build/CMakeFiles/edit_cache.dir
+C:/APPS/EVA_AI/evaaimobile/android/app/.cxx/Debug/2w1nx1r6/x86/AsyncStorageSpec_autolinked_build/CMakeFiles/rebuild_cache.dir
+C:/APPS/EVA_AI/evaaimobile/android/app/.cxx/Debug/2w1nx1r6/x86/RNImagePickerSpec_autolinked_build/CMakeFiles/react_codegen_RNImagePickerSpec.dir
+C:/APPS/EVA_AI/evaaimobile/android/app/.cxx/Debug/2w1nx1r6/x86/RNImagePickerSpec_autolinked_build/CMakeFiles/edit_cache.dir
+C:/APPS/EVA_AI/evaaimobile/android/app/.cxx/Debug/2w1nx1r6/x86/RNImagePickerSpec_autolinked_build/CMakeFiles/rebuild_cache.dir
+C:/APPS/EVA_AI/evaaimobile/android/app/.cxx/Debug/2w1nx1r6/x86/safeareacontext_autolinked_build/CMakeFiles/react_codegen_safeareacontext.dir
+C:/APPS/EVA_AI/evaaimobile/android/app/.cxx/Debug/2w1nx1r6/x86/safeareacontext_autolinked_build/CMakeFiles/edit_cache.dir
+C:/APPS/EVA_AI/evaaimobile/android/app/.cxx/Debug/2w1nx1r6/x86/safeareacontext_autolinked_build/CMakeFiles/rebuild_cache.dir
+C:/APPS/EVA_AI/evaaimobile/android/app/.cxx/Debug/2w1nx1r6/x86/rnscreens_autolinked_build/CMakeFiles/react_codegen_rnscreens.dir
+C:/APPS/EVA_AI/evaaimobile/android/app/.cxx/Debug/2w1nx1r6/x86/rnscreens_autolinked_build/CMakeFiles/edit_cache.dir
+C:/APPS/EVA_AI/evaaimobile/android/app/.cxx/Debug/2w1nx1r6/x86/rnscreens_autolinked_build/CMakeFiles/rebuild_cache.dir

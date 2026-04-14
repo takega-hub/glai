@@ -5,9 +5,14 @@ const API_URL = "https://eva.midoma.ru/api/auth";
 
 const login = async (email, password) => {
   try {
-    const response = await axios.post(`${API_URL}/login`, {
-      email,
-      password,
+    const formData = new URLSearchParams();
+    formData.append('username', email);
+    formData.append('password', password);
+
+    const response = await axios.post(`${API_URL}/token`, formData, {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
     });
     if (response.data.access_token) {
       await AsyncStorage.setItem("@user_token", response.data.access_token);

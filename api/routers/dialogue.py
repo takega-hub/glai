@@ -178,7 +178,7 @@ GIFT_CONFIG = {
     "large": {"trust_gain": 75, "token_cost": 50}
 }
 
-@router.post("/dialogue/send-gift/", response_model=GiftResponse)
+@router.post("/dialogue/send-gift", response_model=GiftResponse)
 async def send_gift(
     request: GiftRequest,
     background_tasks: BackgroundTasks,

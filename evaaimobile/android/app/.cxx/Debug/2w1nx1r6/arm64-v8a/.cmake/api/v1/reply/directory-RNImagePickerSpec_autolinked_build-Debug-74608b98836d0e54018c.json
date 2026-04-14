@@ -1,0 +1,14 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : [],
+		"files" : [],
+		"nodes" : []
+	},
+	"installers" : [],
+	"paths" : 
+	{
+		"build" : "RNImagePickerSpec_autolinked_build",
+		"source" : "C:/APPS/EVA_AI/evaaimobile/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni"
+	}
+}
