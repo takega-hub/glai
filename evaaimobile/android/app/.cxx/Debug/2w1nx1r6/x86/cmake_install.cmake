@@ -45,9 +45,11 @@ endif()
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   # Include the install script for each subdirectory.
   include("C:/APPS/EVA_AI/evaaimobile/android/app/.cxx/Debug/2w1nx1r6/x86/AsyncStorageSpec_autolinked_build/cmake_install.cmake")
+  include("C:/APPS/EVA_AI/evaaimobile/android/app/.cxx/Debug/2w1nx1r6/x86/rngesturehandler_codegen_autolinked_build/cmake_install.cmake")
   include("C:/APPS/EVA_AI/evaaimobile/android/app/.cxx/Debug/2w1nx1r6/x86/RNImagePickerSpec_autolinked_build/cmake_install.cmake")
   include("C:/APPS/EVA_AI/evaaimobile/android/app/.cxx/Debug/2w1nx1r6/x86/safeareacontext_autolinked_build/cmake_install.cmake")
   include("C:/APPS/EVA_AI/evaaimobile/android/app/.cxx/Debug/2w1nx1r6/x86/rnscreens_autolinked_build/cmake_install.cmake")
+  include("C:/APPS/EVA_AI/evaaimobile/android/app/.cxx/Debug/2w1nx1r6/x86/rnsvg_autolinked_build/cmake_install.cmake")
 
 endif()
 

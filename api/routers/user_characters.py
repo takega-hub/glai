@@ -44,7 +44,7 @@ class UserCharacterWithStateResponse(BaseModel):
     is_hot: bool
     subscribers: int
 
-@router.get("/", response_model=List[UserCharacterWithStateResponse])
+@router.get("", response_model=List[UserCharacterWithStateResponse])
 async def get_user_characters(
     current_user=Depends(get_current_user),
     db=Depends(get_db)

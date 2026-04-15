@@ -1,46 +1,33 @@
-import axios from "axios";
-import { useAuthStore } from "../store/authStore";
-
-const API_URL = "https://eva.midoma.ru/api";
-
-const getAuthHeaders = () => {
-  const token = useAuthStore.getState().token;
-  return { Authorization: `Bearer ${token}` };
-};
+import apiClient from "./apiClient";
 
 const getChatHistory = async (characterId) => {
   try {
-    const headers = getAuthHeaders();
-    const response = await axios.get(`${API_URL}/dialogue/history/${characterId}`, { headers });
-    return response.data.messages;
+    console.log(`API Call: getChatHistory for ${characterId}`);
+    const response = await apiClient.get(`/dialogue/history/${characterId}`);
+    console.log(`API Response: getChatHistory successful, status ${response.status}`);
+
+    // Бэкенд возвращает объект { messages: [...], trust_score: X, ... }
+    if (response.data && Array.isArray(response.data.messages)) {
+      return response.data.messages;
+    }
+    if (Array.isArray(response.data)) {
+      return response.data;
+    }
+    return [];
   } catch (error) {
     console.error(`Failed to get chat history for ${characterId}:`, error.response?.data || error.message);
-    throw error;
+    return [];
   }
 };
 
-const sendMessage = async (characterId, message, image) => {
+const sendMessage = async (characterId, message, image = null) => {
   try {
-    const headers = getAuthHeaders();
-    const formData = new FormData();
-    formData.append("character_id", characterId);
-    if (message) {
-      formData.append("message", message);
-    }
-    if (image) {
-      formData.append("image", {
-        uri: image.uri,
-        type: image.type,
-        name: image.fileName,
-      });
-    }
+    const data = {
+      character_id: characterId,
+      message: message || ""
+    };
 
-    const response = await axios.post(`${API_URL}/dialogue/send-message`, formData, {
-      headers: {
-        ...headers,
-        "Content-Type": "multipart/form-data",
-      },
-    });
+    const response = await apiClient.post("/dialogue/send-message", data);
     return response.data;
   } catch (error) {
     console.error("Failed to send message:", error.response?.data || error.message);
@@ -50,8 +37,10 @@ const sendMessage = async (characterId, message, image) => {
 
 const sendGift = async (characterId, giftType) => {
   try {
-    const headers = getAuthHeaders();
-    const response = await axios.post(`${API_URL}/dialogue/send-gift`, { character_id: characterId, gift_type: giftType }, { headers });
+    const response = await apiClient.post("/dialogue/send-gift", {
+      character_id: characterId,
+      gift_type: giftType
+    });
     return response.data;
   } catch (error) {
     console.error("Failed to send gift:", error.response?.data || error.message);
@@ -61,8 +50,7 @@ const sendGift = async (characterId, giftType) => {
 
 const getBalance = async () => {
   try {
-    const headers = getAuthHeaders();
-    const response = await axios.get(`${API_URL}/tokens/balance`, { headers }); 
+    const response = await apiClient.get("/tokens/balance");
     return response.data;
   } catch (error) {
     console.error("Failed to get balance:", error.response?.data || error.message);

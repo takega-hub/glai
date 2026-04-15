@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { createJSONStorage, persist } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuthStore } from './authStore';
 
 interface FavoritesState {
@@ -47,6 +48,7 @@ export const useFavoritesStore = create<FavoritesState>()(
     }),
     {
       name: getFavoritesStorageName(),
+      storage: createJSONStorage(() => AsyncStorage),
     }
   )
 );

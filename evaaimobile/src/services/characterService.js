@@ -1,17 +1,9 @@
-import axios from "axios";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-
-const API_URL = "https://eva.midoma.ru/api";
-
-const getAuthHeaders = async () => {
-  const token = await AsyncStorage.getItem("@user_token");
-  return { Authorization: `Bearer ${token}` };
-};
+import apiClient from "./apiClient";
 
 const getCharacters = async () => {
   try {
-    const headers = await getAuthHeaders();
-    const response = await axios.get(`${API_URL}/characters`, { headers });
+    console.log("Fetching characters...");
+    const response = await apiClient.get("/characters/");
     return response.data;
   } catch (error) {
     console.error("Failed to get characters:", error.response?.data || error.message);
@@ -21,8 +13,7 @@ const getCharacters = async () => {
 
 const getCharacterById = async (id) => {
   try {
-    const headers = await getAuthHeaders();
-    const response = await axios.get(`${API_URL}/characters/${id}`, { headers });
+    const response = await apiClient.get(`/characters/${id}`);
     return response.data;
   } catch (error) {
     console.error(`Failed to get character ${id}:`, error.response?.data || error.message);
@@ -30,7 +21,32 @@ const getCharacterById = async (id) => {
   }
 };
 
+const getCharacterContent = async (characterId) => {
+  try {
+    const response = await apiClient.get(`/content/character/${characterId}`);
+    return response.data;
+  } catch (error) {
+    console.error(`Failed to get character content ${characterId}:`, error.response?.data || error.message);
+    throw error;
+  }
+};
+
+const getPersonalGallery = async (characterId) => {
+  try {
+    const response = await apiClient.get(`/characters/${characterId}/personal-gallery`);
+    return response.data;
+  } catch (error) {
+    console.error(`Failed to get personal gallery ${characterId}:`, error.response?.data || error.message);
+    throw error;
+  }
+};
+
+const getCharacterPhotos = getCharacterContent;
+
 export default {
   getCharacters,
   getCharacterById,
+  getCharacterContent,
+  getPersonalGallery,
+  getCharacterPhotos,
 };

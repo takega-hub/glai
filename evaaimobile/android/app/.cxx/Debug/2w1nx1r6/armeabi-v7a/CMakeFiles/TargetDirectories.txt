@@ -4,6 +4,9 @@ C:/APPS/EVA_AI/evaaimobile/android/app/.cxx/Debug/2w1nx1r6/armeabi-v7a/CMakeFile
 C:/APPS/EVA_AI/evaaimobile/android/app/.cxx/Debug/2w1nx1r6/armeabi-v7a/AsyncStorageSpec_autolinked_build/CMakeFiles/react_codegen_AsyncStorageSpec.dir
 C:/APPS/EVA_AI/evaaimobile/android/app/.cxx/Debug/2w1nx1r6/armeabi-v7a/AsyncStorageSpec_autolinked_build/CMakeFiles/edit_cache.dir
 C:/APPS/EVA_AI/evaaimobile/android/app/.cxx/Debug/2w1nx1r6/armeabi-v7a/AsyncStorageSpec_autolinked_build/CMakeFiles/rebuild_cache.dir
+C:/APPS/EVA_AI/evaaimobile/android/app/.cxx/Debug/2w1nx1r6/armeabi-v7a/rngesturehandler_codegen_autolinked_build/CMakeFiles/react_codegen_rngesturehandler_codegen.dir
+C:/APPS/EVA_AI/evaaimobile/android/app/.cxx/Debug/2w1nx1r6/armeabi-v7a/rngesturehandler_codegen_autolinked_build/CMakeFiles/edit_cache.dir
+C:/APPS/EVA_AI/evaaimobile/android/app/.cxx/Debug/2w1nx1r6/armeabi-v7a/rngesturehandler_codegen_autolinked_build/CMakeFiles/rebuild_cache.dir
 C:/APPS/EVA_AI/evaaimobile/android/app/.cxx/Debug/2w1nx1r6/armeabi-v7a/RNImagePickerSpec_autolinked_build/CMakeFiles/react_codegen_RNImagePickerSpec.dir
 C:/APPS/EVA_AI/evaaimobile/android/app/.cxx/Debug/2w1nx1r6/armeabi-v7a/RNImagePickerSpec_autolinked_build/CMakeFiles/edit_cache.dir
 C:/APPS/EVA_AI/evaaimobile/android/app/.cxx/Debug/2w1nx1r6/armeabi-v7a/RNImagePickerSpec_autolinked_build/CMakeFiles/rebuild_cache.dir
@@ -13,3 +16,6 @@ C:/APPS/EVA_AI/evaaimobile/android/app/.cxx/Debug/2w1nx1r6/armeabi-v7a/safeareac
 C:/APPS/EVA_AI/evaaimobile/android/app/.cxx/Debug/2w1nx1r6/armeabi-v7a/rnscreens_autolinked_build/CMakeFiles/react_codegen_rnscreens.dir
 C:/APPS/EVA_AI/evaaimobile/android/app/.cxx/Debug/2w1nx1r6/armeabi-v7a/rnscreens_autolinked_build/CMakeFiles/edit_cache.dir
 C:/APPS/EVA_AI/evaaimobile/android/app/.cxx/Debug/2w1nx1r6/armeabi-v7a/rnscreens_autolinked_build/CMakeFiles/rebuild_cache.dir
+C:/APPS/EVA_AI/evaaimobile/android/app/.cxx/Debug/2w1nx1r6/armeabi-v7a/rnsvg_autolinked_build/CMakeFiles/react_codegen_rnsvg.dir
+C:/APPS/EVA_AI/evaaimobile/android/app/.cxx/Debug/2w1nx1r6/armeabi-v7a/rnsvg_autolinked_build/CMakeFiles/edit_cache.dir
+C:/APPS/EVA_AI/evaaimobile/android/app/.cxx/Debug/2w1nx1r6/armeabi-v7a/rnsvg_autolinked_build/CMakeFiles/rebuild_cache.dir

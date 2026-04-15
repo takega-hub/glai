@@ -5,43 +5,47 @@ import { appleAuth } from "@invertase/react-native-apple-authentication";
 
 const API_URL = "https://eva.midoma.ru/api";
 
-// ...
-
 const login = async (email, password) => {
+  console.log("Attempting login for:", email);
   try {
-    // Используем URLSearchParams и явно переводим в строку для корректной передачи в RN
-    const params = new URLSearchParams();
-    params.append('username', email);
-    params.append('password', password);
+    // Для FastAPI OAuth2PasswordRequestForm ОБЯЗАТЕЛЬНО использовать application/x-www-form-urlencoded
+    const body = `username=${encodeURIComponent(email)}&password=${encodeURIComponent(password)}`;
 
-    const response = await axios.post(`${API_URL}/auth/token`, params.toString(), {
+    const response = await fetch(`${API_URL}/auth/token`, {
+      method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         'Accept': 'application/json',
-      }
+      },
+      body: body,
     });
-    
-    if (response.data.access_token) {
-      await AsyncStorage.setItem("@user_token", response.data.access_token);
-      await AsyncStorage.setItem("@user_data", JSON.stringify(response.data.user));
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error("Login failed with status:", response.status, data);
+      throw new Error(data.detail || 'Login failed');
     }
-    return response.data;
+
+    if (data.access_token) {
+      await AsyncStorage.setItem("@user_token", data.access_token);
+      if (data.user) {
+        await AsyncStorage.setItem("@user_data", JSON.stringify(data.user));
+      }
+    }
+    return data;
   } catch (error) {
-    console.error("Login failed:", error.response?.data || error.message);
+    console.error("Login error:", error.message);
     throw error;
   }
 };
 
 const loginWithGoogle = async () => {
   try {
-    // Check if Google Play Services are available
     await GoogleSignin.hasPlayServices();
-    
-    // Get user info from Google
     const userInfo = await GoogleSignin.signIn();
     
     if (userInfo.idToken) {
-      // Send token to backend
       const response = await axios.post(`${API_URL}/auth/google`, {
         id_token: userInfo.idToken,
       });
@@ -50,7 +54,6 @@ const loginWithGoogle = async () => {
         await AsyncStorage.setItem("@user_token", response.data.access_token);
         await AsyncStorage.setItem("@user_data", JSON.stringify(response.data.user));
       }
-      
       return response.data;
     } else {
       throw new Error("No ID token received from Google");
@@ -63,24 +66,19 @@ const loginWithGoogle = async () => {
 
 const loginWithApple = async () => {
   try {
-    // Check if Apple Sign-In is available
     const appleAuthAvailable = await appleAuth.isSupported;
-    
     if (!appleAuthAvailable) {
       throw new Error("Apple Sign-In is not supported on this device");
     }
     
-    // Start Apple Sign-In
     const appleAuthRequestResponse = await appleAuth.performRequest({
       requestedOperation: appleAuth.Operation.LOGIN,
       requestedScopes: [appleAuth.Scope.EMAIL, appleAuth.Scope.FULL_NAME],
     });
     
-    // Get identity token
     const credentialState = await appleAuth.getCredentialStateForUser(appleAuthRequestResponse.user);
     
     if (credentialState === appleAuth.State.AUTHORIZED) {
-      // Send token to backend
       const response = await axios.post(`${API_URL}/auth/apple`, {
         identity_token: appleAuthRequestResponse.identityToken,
         full_name: appleAuthRequestResponse.fullName 
@@ -93,7 +91,6 @@ const loginWithApple = async () => {
         await AsyncStorage.setItem("@user_token", response.data.access_token);
         await AsyncStorage.setItem("@user_data", JSON.stringify(response.data.user));
       }
-      
       return response.data;
     } else {
       throw new Error("Apple authorization failed");
@@ -106,23 +103,11 @@ const loginWithApple = async () => {
 
 const logout = async () => {
   try {
-    // Sign out from Google if needed
+    try { await GoogleSignin.signOut(); } catch (e) {}
     try {
-      await GoogleSignin.signOut();
-    } catch (googleError) {
-      // Ignore Google logout errors
-    }
+      await appleAuth.performRequest({ requestedOperation: appleAuth.Operation.LOGOUT });
+    } catch (e) {}
     
-    // Sign out from Apple if needed
-    try {
-      await appleAuth.performRequest({
-        requestedOperation: appleAuth.Operation.LOGOUT,
-      });
-    } catch (appleError) {
-      // Ignore Apple logout errors
-    }
-    
-    // Clear local storage
     await AsyncStorage.removeItem("@user_token");
     await AsyncStorage.removeItem("@user_data");
   } catch (error) {
@@ -135,29 +120,15 @@ const getCurrentUser = async () => {
   try {
     const token = await AsyncStorage.getItem("@user_token");
     const userData = await AsyncStorage.getItem("@user_data");
-    
-    if (token && userData) {
-      return {
-        token,
-        user: JSON.parse(userData)
-      };
-    }
-    
-    return null;
+    return (token && userData) ? { token, user: JSON.parse(userData) } : null;
   } catch (error) {
-    console.error("Get current user error:", error);
     return null;
   }
 };
 
 const isAuthenticated = async () => {
-  try {
-    const token = await AsyncStorage.getItem("@user_token");
-    return !!token;
-  } catch (error) {
-    console.error("Check auth error:", error);
-    return false;
-  }
+  const token = await AsyncStorage.getItem("@user_token");
+  return !!token;
 };
 
 export default {
