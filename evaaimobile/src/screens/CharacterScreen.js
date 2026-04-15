@@ -43,6 +43,12 @@ const CharacterScreen = ({ route, navigation }) => {
 
   useEffect(() => {
     const fetchCharacter = async () => {
+      if (!characterId) {
+        console.error("CharacterScreen: characterId is undefined");
+        setError("Invalid character ID");
+        setLoading(false);
+        return;
+      }
       try {
         const data = await characterService.getCharacterById(characterId);
         setCharacter(data);
@@ -54,6 +60,7 @@ const CharacterScreen = ({ route, navigation }) => {
     };
 
     const fetchPhotos = async () => {
+      if (!characterId) return;
       setLoadingPhotos(true);
       try {
         const contentResponse = await characterService.getCharacterContent(characterId);
@@ -104,8 +111,9 @@ const CharacterScreen = ({ route, navigation }) => {
 
   if (!character) return null;
 
+  const charId = character.id || character._id;
   const trustPercentage = Math.min(Math.round((character.trust_score || 0) / 10), 100);
-  const favorite = isFavorite(character.id);
+  const favorite = isFavorite(charId);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -116,7 +124,7 @@ const CharacterScreen = ({ route, navigation }) => {
             <Image source={{ uri: getFullImageUrl(character.avatar_url) }} style={styles.avatar} />
             <TouchableOpacity
               style={[styles.favoriteButton, favorite && styles.favoriteButtonActive]}
-              onPress={() => toggleFavorite(character.id)}
+              onPress={() => toggleFavorite(character)}
             >
               <Heart size={24} color={favorite ? "#ef4444" : "white"} fill={favorite ? "#ef4444" : "transparent"} />
             </TouchableOpacity>
@@ -149,7 +157,7 @@ const CharacterScreen = ({ route, navigation }) => {
               style={styles.chatButton}
               onPress={() =>
                 navigation.navigate("Chat", {
-                  characterId: character.id,
+                  characterId: charId,
                   characterName: character.display_name || character.name,
                 })
               }

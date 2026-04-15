@@ -1,8 +1,8 @@
 import React from "react";
-import { View, ActivityIndicator, TouchableOpacity } from "react-native";
+import { View, TouchableOpacity } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { User } from "lucide-react-native";
+import { Heart, User } from "lucide-react-native";
 import { useAuthStore } from "../store/authStore";
 
 import LoginScreen from "../screens/LoginScreen";
@@ -11,7 +11,6 @@ import CharacterScreen from "../screens/CharacterScreen";
 import ChatScreen from "../screens/ChatScreen";
 import ProfileScreen from "../screens/ProfileScreen";
 import FavoritesScreen from "../screens/FavoritesScreen";
-import { Heart, User } from "lucide-react-native";
 
 const Stack = createNativeStackNavigator();
 

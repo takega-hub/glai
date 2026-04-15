@@ -1,61 +1,82 @@
+import firebase from "@react-native-firebase/app";
 import messaging from "@react-native-firebase/messaging";
 import apiClient from "./apiClient";
 import { Platform, Alert } from "react-native";
 
 class PushNotificationService {
-  async requestUserPermission() {
-    const authStatus = await messaging().requestPermission();
-    const enabled =
-      authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-      authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+  // Безопасное получение объекта messaging
+  getMessaging() {
+    try {
+      // В RN Firebase 15+ проверка идет через firebase.apps.length
+      if (firebase.apps && firebase.apps.length > 0) {
+        return messaging();
+      }
+      console.log("Firebase: No apps initialized yet.");
+      return null;
+    } catch (error) {
+      console.log("Firebase: Messaging not available", error);
+      return null;
+    }
+  }
 
-    if (enabled) {
-      console.log("Authorization status:", authStatus);
-      await this.getToken();
+  async requestUserPermission() {
+    const msg = this.getMessaging();
+    if (!msg) return;
+
+    try {
+      const authStatus = await msg.requestPermission();
+      const enabled =
+        authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+        authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+
+      if (enabled) {
+        await this.getToken();
+      }
+    } catch (error) {
+      console.log("Push permission error:", error);
     }
   }
 
   async getToken() {
+    const msg = this.getMessaging();
+    if (!msg) return;
+
     try {
-      const fcmToken = await messaging().getToken();
+      const fcmToken = await msg.getToken();
       if (fcmToken) {
         console.log("FCM Token:", fcmToken);
         await this.sendTokenToServer(fcmToken);
       }
     } catch (error) {
-      console.error("Failed to get FCM token:", error);
+      console.log("FCM Token error:", error);
     }
   }
 
   async sendTokenToServer(token) {
     try {
-      await apiClient.post("/user/push-token", {
-        token: token,
-        platform: Platform.OS,
+      await apiClient.post("/notifications/register-device", {
+        device_token: token,
+        device_type: Platform.OS, // 'android' or 'ios'
       });
-      console.log("Push token sent to server successfully");
+      console.log("Push token registered successfully");
     } catch (error) {
-      console.error("Failed to send push token to server:", error);
+      console.error("API error registering push token:", error.response?.data || error.message);
     }
   }
 
-  // Обработка уведомлений, когда приложение открыто
   onMessageReceived() {
-    return messaging().onMessage(async (remoteMessage) => {
-      Alert.alert(
-        remoteMessage.notification?.title || "New Message",
-        remoteMessage.notification?.body || ""
-      );
-    });
-  }
+    const msg = this.getMessaging();
+    if (!msg) return () => {};
 
-  // Обработка клика по уведомлению (когда приложение было закрыто)
-  async checkInitialNotification(navigation) {
-    const remoteMessage = await messaging().getInitialNotification();
-    if (remoteMessage) {
-      console.log("Notification caused app to open from quit state:", remoteMessage);
-      // Здесь можно добавить навигацию в конкретный чат:
-      // if (remoteMessage.data.characterId) navigation.navigate('Chat', { ... })
+    try {
+      return msg.onMessage(async (remoteMessage) => {
+        Alert.alert(
+          remoteMessage.notification?.title || "New Message",
+          remoteMessage.notification?.body || ""
+        );
+      });
+    } catch (e) {
+      return () => {};
     }
   }
 }

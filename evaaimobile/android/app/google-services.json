@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "915322282890",
+    "project_id": "glai-5f0f5",
+    "storage_bucket": "glai-5f0f5.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:915322282890:android:8b71ffbf988b9643529e73",
+        "android_client_info": {
+          "package_name": "com.evaaimobile"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "915322282890-t3mjq992c3d44tqa5raljmvmtg3b3de2.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.evaaimobile",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "915322282890-icdovedtf3n5rvl4ues81l205qcb3mhu.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBjEmRmHqVauD_99HbDTDphzOfZc1wOVT0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "915322282890-icdovedtf3n5rvl4ues81l205qcb3mhu.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,6 +1,7 @@
 {
   "buildFiles": [
     "C:\\APPS\\EVA_AI\\evaaimobile\\node_modules\\@react-native-async-storage\\async-storage\\android\\build\\generated\\source\\codegen\\jni\\CMakeLists.txt",
+    "C:\\APPS\\EVA_AI\\evaaimobile\\node_modules\\react-native-gesture-handler\\android\\build\\generated\\source\\codegen\\jni\\CMakeLists.txt",
     "C:\\APPS\\EVA_AI\\evaaimobile\\node_modules\\react-native-image-picker\\android\\build\\generated\\source\\codegen\\jni\\CMakeLists.txt",
     "C:\\APPS\\EVA_AI\\evaaimobile\\node_modules\\react-native-safe-area-context\\android\\src\\main\\jni\\CMakeLists.txt",
     "C:\\APPS\\EVA_AI\\evaaimobile\\node_modules\\react-native-screens\\android\\src\\main\\jni\\CMakeLists.txt",
@@ -27,10 +28,15 @@
       "abi": "armeabi-v7a",
       "output": "C:\\APPS\\EVA_AI\\evaaimobile\\android\\app\\build\\intermediates\\cxx\\Debug\\2w1nx1r6\\obj\\armeabi-v7a\\libreact_codegen_safeareacontext.so",
       "runtimeFiles": [
-        "C:\\Users\\takeg\\.gradle\\caches\\8.13\\transforms\\d28216b1f299bedd089711cdfcc51ecb\\transformed\\fbjni-0.7.0\\prefab\\modules\\fbjni\\libs\\android.armeabi-v7a\\libfbjni.so",
-        "C:\\Users\\takeg\\.gradle\\caches\\8.13\\transforms\\f008af38d590a55758788c8dbeac9a53\\transformed\\react-android-0.84.1-debug\\prefab\\modules\\jsi\\libs\\android.armeabi-v7a\\libjsi.so",
-        "C:\\Users\\takeg\\.gradle\\caches\\8.13\\transforms\\f008af38d590a55758788c8dbeac9a53\\transformed\\react-android-0.84.1-debug\\prefab\\modules\\reactnative\\libs\\android.armeabi-v7a\\libreactnative.so"
+        "C:\\Users\\takeg\\.gradle\\caches\\8.13\\transforms\\5e05e370fa6b518d4dd88ee10c1d4f0d\\transformed\\fbjni-0.7.0\\prefab\\modules\\fbjni\\libs\\android.armeabi-v7a\\libfbjni.so",
+        "C:\\Users\\takeg\\.gradle\\caches\\8.13\\transforms\\82a7bcf519c56e51f6d8a19337508e5a\\transformed\\react-android-0.84.1-debug\\prefab\\modules\\jsi\\libs\\android.armeabi-v7a\\libjsi.so",
+        "C:\\Users\\takeg\\.gradle\\caches\\8.13\\transforms\\82a7bcf519c56e51f6d8a19337508e5a\\transformed\\react-android-0.84.1-debug\\prefab\\modules\\reactnative\\libs\\android.armeabi-v7a\\libreactnative.so"
       ]
+    },
+    "react_codegen_rngesturehandler_codegen::@39f233abcd2c728bc6ec": {
+      "artifactName": "react_codegen_rngesturehandler_codegen",
+      "abi": "armeabi-v7a",
+      "runtimeFiles": []
     },
     "react_codegen_RNImagePickerSpec::@f66ee9a2efecfb28bee4": {
       "artifactName": "react_codegen_RNImagePickerSpec",
@@ -42,9 +48,9 @@
       "abi": "armeabi-v7a",
       "output": "C:\\APPS\\EVA_AI\\evaaimobile\\android\\app\\build\\intermediates\\cxx\\Debug\\2w1nx1r6\\obj\\armeabi-v7a\\libreact_codegen_rnscreens.so",
       "runtimeFiles": [
-        "C:\\Users\\takeg\\.gradle\\caches\\8.13\\transforms\\f008af38d590a55758788c8dbeac9a53\\transformed\\react-android-0.84.1-debug\\prefab\\modules\\reactnative\\libs\\android.armeabi-v7a\\libreactnative.so",
-        "C:\\Users\\takeg\\.gradle\\caches\\8.13\\transforms\\f008af38d590a55758788c8dbeac9a53\\transformed\\react-android-0.84.1-debug\\prefab\\modules\\jsi\\libs\\android.armeabi-v7a\\libjsi.so",
-        "C:\\Users\\takeg\\.gradle\\caches\\8.13\\transforms\\d28216b1f299bedd089711cdfcc51ecb\\transformed\\fbjni-0.7.0\\prefab\\modules\\fbjni\\libs\\android.armeabi-v7a\\libfbjni.so"
+        "C:\\Users\\takeg\\.gradle\\caches\\8.13\\transforms\\82a7bcf519c56e51f6d8a19337508e5a\\transformed\\react-android-0.84.1-debug\\prefab\\modules\\reactnative\\libs\\android.armeabi-v7a\\libreactnative.so",
+        "C:\\Users\\takeg\\.gradle\\caches\\8.13\\transforms\\82a7bcf519c56e51f6d8a19337508e5a\\transformed\\react-android-0.84.1-debug\\prefab\\modules\\jsi\\libs\\android.armeabi-v7a\\libjsi.so",
+        "C:\\Users\\takeg\\.gradle\\caches\\8.13\\transforms\\5e05e370fa6b518d4dd88ee10c1d4f0d\\transformed\\fbjni-0.7.0\\prefab\\modules\\fbjni\\libs\\android.armeabi-v7a\\libfbjni.so"
       ]
     },
     "appmodules::@6890427a1f51a3e7e1df": {
@@ -55,9 +61,9 @@
         "C:\\APPS\\EVA_AI\\evaaimobile\\android\\app\\build\\intermediates\\cxx\\Debug\\2w1nx1r6\\obj\\armeabi-v7a\\libreact_codegen_safeareacontext.so",
         "C:\\APPS\\EVA_AI\\evaaimobile\\android\\app\\build\\intermediates\\cxx\\Debug\\2w1nx1r6\\obj\\armeabi-v7a\\libreact_codegen_rnscreens.so",
         "C:\\APPS\\EVA_AI\\evaaimobile\\android\\app\\build\\intermediates\\cxx\\Debug\\2w1nx1r6\\obj\\armeabi-v7a\\libreact_codegen_rnsvg.so",
-        "C:\\Users\\takeg\\.gradle\\caches\\8.13\\transforms\\d28216b1f299bedd089711cdfcc51ecb\\transformed\\fbjni-0.7.0\\prefab\\modules\\fbjni\\libs\\android.armeabi-v7a\\libfbjni.so",
-        "C:\\Users\\takeg\\.gradle\\caches\\8.13\\transforms\\f008af38d590a55758788c8dbeac9a53\\transformed\\react-android-0.84.1-debug\\prefab\\modules\\jsi\\libs\\android.armeabi-v7a\\libjsi.so",
-        "C:\\Users\\takeg\\.gradle\\caches\\8.13\\transforms\\f008af38d590a55758788c8dbeac9a53\\transformed\\react-android-0.84.1-debug\\prefab\\modules\\reactnative\\libs\\android.armeabi-v7a\\libreactnative.so"
+        "C:\\Users\\takeg\\.gradle\\caches\\8.13\\transforms\\5e05e370fa6b518d4dd88ee10c1d4f0d\\transformed\\fbjni-0.7.0\\prefab\\modules\\fbjni\\libs\\android.armeabi-v7a\\libfbjni.so",
+        "C:\\Users\\takeg\\.gradle\\caches\\8.13\\transforms\\82a7bcf519c56e51f6d8a19337508e5a\\transformed\\react-android-0.84.1-debug\\prefab\\modules\\jsi\\libs\\android.armeabi-v7a\\libjsi.so",
+        "C:\\Users\\takeg\\.gradle\\caches\\8.13\\transforms\\82a7bcf519c56e51f6d8a19337508e5a\\transformed\\react-android-0.84.1-debug\\prefab\\modules\\reactnative\\libs\\android.armeabi-v7a\\libreactnative.so"
       ]
     },
     "react_codegen_rnsvg::@4f40eb209d0c0b4a3b65": {
@@ -65,9 +71,9 @@
       "abi": "armeabi-v7a",
       "output": "C:\\APPS\\EVA_AI\\evaaimobile\\android\\app\\build\\intermediates\\cxx\\Debug\\2w1nx1r6\\obj\\armeabi-v7a\\libreact_codegen_rnsvg.so",
       "runtimeFiles": [
-        "C:\\Users\\takeg\\.gradle\\caches\\8.13\\transforms\\f008af38d590a55758788c8dbeac9a53\\transformed\\react-android-0.84.1-debug\\prefab\\modules\\reactnative\\libs\\android.armeabi-v7a\\libreactnative.so",
-        "C:\\Users\\takeg\\.gradle\\caches\\8.13\\transforms\\f008af38d590a55758788c8dbeac9a53\\transformed\\react-android-0.84.1-debug\\prefab\\modules\\jsi\\libs\\android.armeabi-v7a\\libjsi.so",
-        "C:\\Users\\takeg\\.gradle\\caches\\8.13\\transforms\\d28216b1f299bedd089711cdfcc51ecb\\transformed\\fbjni-0.7.0\\prefab\\modules\\fbjni\\libs\\android.armeabi-v7a\\libfbjni.so"
+        "C:\\Users\\takeg\\.gradle\\caches\\8.13\\transforms\\82a7bcf519c56e51f6d8a19337508e5a\\transformed\\react-android-0.84.1-debug\\prefab\\modules\\reactnative\\libs\\android.armeabi-v7a\\libreactnative.so",
+        "C:\\Users\\takeg\\.gradle\\caches\\8.13\\transforms\\82a7bcf519c56e51f6d8a19337508e5a\\transformed\\react-android-0.84.1-debug\\prefab\\modules\\jsi\\libs\\android.armeabi-v7a\\libjsi.so",
+        "C:\\Users\\takeg\\.gradle\\caches\\8.13\\transforms\\5e05e370fa6b518d4dd88ee10c1d4f0d\\transformed\\fbjni-0.7.0\\prefab\\modules\\fbjni\\libs\\android.armeabi-v7a\\libfbjni.so"
       ]
     },
     "react_codegen_AsyncStorageSpec::@15af80695a6281ecf900": {

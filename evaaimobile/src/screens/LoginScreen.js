@@ -26,8 +26,10 @@ const LoginScreen = ({ navigation }) => {
 
   useEffect(() => {
     GoogleSignin.configure({
-      webClientId: "YOUR_WEB_CLIENT_ID", // Replace with actual ID
+      webClientId: "915322282890-icdovedtf3n5rvl4ues81l205qcb3mhu.apps.googleusercontent.com",
+      scopes: ["profile", "email"],
       offlineAccess: true,
+      forceCodeForRefreshToken: true,
     });
   }, []);
 
@@ -70,13 +72,29 @@ const LoginScreen = ({ navigation }) => {
     try {
       await GoogleSignin.hasPlayServices();
       const userInfo = await GoogleSignin.signIn();
-      const token = userInfo.idToken;
+      console.log("Google Sign-In response:", JSON.stringify(userInfo));
+
+      const token = userInfo.idToken || (userInfo.data && userInfo.data.idToken);
+
+      if (!token) {
+        throw new Error("No ID Token received from Google. Check your Firebase configuration.");
+      }
+
       await authService.socialLogin("google", token);
       navigation.replace("Main");
     } catch (error) {
-      if (error.code !== statusCodes.SIGN_IN_CANCELLED) {
-        console.error("Google login error:", error);
-        Alert.alert("Error", "Google login failed");
+      if (error.code === statusCodes.SIGN_IN_CANCELLED) {
+        console.log("User cancelled Google Sign-in");
+      } else if (error.code === statusCodes.IN_PROGRESS) {
+        console.log("Google Sign-in already in progress");
+      } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+        Alert.alert("Error", "Google Play Services not available or outdated");
+      } else if (error.code === statusCodes.DEVELOPER_ERROR) {
+        console.error("DEVELOPER_ERROR: Check SHA-1 and Web Client ID in Firebase console");
+        Alert.alert("Configuration Error", "Google Sign-In is not configured correctly. Check SHA-1 and Web Client ID.");
+      } else {
+        console.error("Google login error detail:", JSON.stringify(error));
+        Alert.alert("Google Login Error", error.message || "An unexpected error occurred.");
       }
     } finally {
       setLoading(false);

@@ -62,15 +62,16 @@ const MainScreen = ({ navigation }) => {
   };
 
   const renderCharacterCard = ({ item }) => {
+    const charId = item.id || item._id;
     const trustPercentage = Math.min(Math.round((item.trust_score || 0) / 10), 100);
-    const favorite = isFavorite(item.id);
+    const favorite = isFavorite(charId);
 
     return (
       <TouchableOpacity
         activeOpacity={0.9}
         onPress={() =>
           navigation.navigate("Character", {
-            characterId: item.id,
+            characterId: charId,
             characterName: item.display_name || item.name,
           })
         }
@@ -101,7 +102,7 @@ const MainScreen = ({ navigation }) => {
             {/* Favorite Button */}
             <TouchableOpacity
               style={[styles.favoriteButton, favorite && styles.favoriteButtonActive]}
-              onPress={() => toggleFavorite(item.id)}
+              onPress={() => toggleFavorite(item)}
             >
               <Heart size={20} color={favorite ? "#ef4444" : "white"} fill={favorite ? "#ef4444" : "transparent"} />
             </TouchableOpacity>
@@ -171,7 +172,7 @@ const MainScreen = ({ navigation }) => {
       <FlatList
         data={characters}
         renderItem={renderCharacterCard}
-        keyExtractor={(item) => (item.id ? item.id.toString() : Math.random().toString())}
+        keyExtractor={(item) => (item.id || item._id || Math.random()).toString()}
         numColumns={COLUMN_COUNT}
         columnWrapperStyle={styles.columnWrapper}
         contentContainerStyle={styles.listContent}

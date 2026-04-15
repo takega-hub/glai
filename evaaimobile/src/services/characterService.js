@@ -3,7 +3,7 @@ import apiClient from "./apiClient";
 const getCharacters = async () => {
   try {
     console.log("Fetching characters...");
-    const response = await apiClient.get("/characters/");
+    const response = await apiClient.get("/characters");
     return response.data;
   } catch (error) {
     console.error("Failed to get characters:", error.response?.data || error.message);

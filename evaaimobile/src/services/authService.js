@@ -114,7 +114,7 @@ const socialLogin = async (provider, token) => {
 };
 
 const logout = async () => {
-  useAuthStore.getState().clearAuth();
+  useAuthStore.getState().logout();
 };
 
 const getCurrentUser = () => {

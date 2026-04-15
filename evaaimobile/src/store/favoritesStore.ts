@@ -3,12 +3,19 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuthStore } from './authStore';
 
+export interface Character {
+  id: string | number;
+  name?: string;
+  display_name?: string;
+  description?: string;
+  avatar_url?: string;
+  [key: string]: any;
+}
+
 interface FavoritesState {
-  favoriteCharacterIds: string[];
-  addFavorite: (characterId: string) => void;
-  removeFavorite: (characterId: string) => void;
-  isFavorite: (characterId: string) => boolean;
-  toggleFavorite: (characterId: string) => void;
+  favorites: Character[];
+  toggleFavorite: (character: Character) => void;
+  isFavorite: (characterId: string | number | undefined) => boolean;
 }
 
 const getFavoritesStorageName = () => {
@@ -19,30 +26,32 @@ const getFavoritesStorageName = () => {
 export const useFavoritesStore = create<FavoritesState>()(
   persist(
     (set, get) => ({
-      favoriteCharacterIds: [],
+      favorites: [],
       
-      addFavorite: (characterId: string) => {
-        set((state) => ({
-          favoriteCharacterIds: [...state.favoriteCharacterIds, characterId],
-        }));
+      isFavorite: (characterId: string | number | undefined) => {
+        if (!characterId) return false;
+        const currentFavorites = get().favorites || [];
+        return currentFavorites.some(char =>
+          char && (char.id || char._id) && (char.id || char._id).toString() === characterId.toString()
+        );
       },
       
-      removeFavorite: (characterId: string) => {
-        set((state) => ({
-          favoriteCharacterIds: state.favoriteCharacterIds.filter(id => id !== characterId),
-        }));
-      },
-      
-      isFavorite: (characterId: string) => {
-        return get().favoriteCharacterIds.includes(characterId);
-      },
-      
-      toggleFavorite: (characterId: string) => {
-        const isCurrentlyFavorite = get().isFavorite(characterId);
+      toggleFavorite: (character: Character) => {
+        const charId = character?.id || character?._id;
+        if (!charId) return;
+
+        const isCurrentlyFavorite = get().isFavorite(charId);
         if (isCurrentlyFavorite) {
-          get().removeFavorite(characterId);
+          set((state) => ({
+            favorites: state.favorites.filter(char => {
+              const id = char?.id || char?._id;
+              return id && id.toString() !== charId.toString();
+            }),
+          }));
         } else {
-          get().addFavorite(characterId);
+          set((state) => ({
+            favorites: [...state.favorites, character],
+          }));
         }
       },
     }),
@@ -51,13 +60,4 @@ export const useFavoritesStore = create<FavoritesState>()(
       storage: createJSONStorage(() => AsyncStorage),
     }
   )
-);
-
-// Subscribe to auth changes to reload favorites when user changes
-useAuthStore.subscribe(
-  (state, prevState) => {
-    if (state.user?.id !== prevState.user?.id) {
-      useFavoritesStore.persist.rehydrate();
-    }
-  }
 );

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -20,9 +20,7 @@ import {
   X,
   Bell,
   Moon,
-  Sun,
   Lock,
-  Info,
   CreditCard,
   History,
   ChevronRight,
@@ -31,7 +29,6 @@ import {
   Heart,
   Smile,
   HelpCircle,
-  Flame,
 } from "lucide-react-native";
 import { useAuthStore } from "../store/authStore";
 import { launchImageLibrary } from "react-native-image-picker";
@@ -40,7 +37,9 @@ import authService from "../services/authService";
 import chatService from "../services/chatService";
 
 const ProfileScreen = () => {
-  const { user, token, setAuth, balance, updateBalance, clearAuth } = useAuthStore();
+  const { user, token, setAuth, logout } = useAuthStore();
+  const [balance, setBalance] = useState(user?.tokens || 0);
+  const clearAuth = logout;
   const [isEditing, setIsEditing] = useState(false);
   const [displayName, setDisplayName] = useState(user?.display_name || "");
   const [about, setAbout] = useState(user?.about || "");
@@ -62,23 +61,25 @@ const ProfileScreen = () => {
 
       try {
         const balanceData = await chatService.getBalance();
-        updateBalance(balanceData.balance);
+        setBalance(balanceData.balance);
       } catch (error) {
         console.error("Failed to fetch balance", error);
       }
 
       try {
         const historyData = await userService.getHistory();
-        setHistory(historyData);
+        setHistory(Array.isArray(historyData) ? historyData : (historyData?.history || []));
       } catch (error) {
         console.error("Failed to fetch history", error);
+        setHistory([]);
       }
 
       try {
         const packagesData = await userService.getPackages();
-        setPackages(packagesData);
+        setPackages(Array.isArray(packagesData) ? packagesData : (packagesData?.packages || []));
       } catch (error) {
         console.error("Failed to fetch packages", error);
+        setPackages([]);
       }
     };
 
@@ -233,8 +234,8 @@ const ProfileScreen = () => {
           {/* Top up balance */}
           <Text style={styles.subSectionTitle}>Top up balance</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.packagesScroll}>
-            {packages.map((pkg) => (
-              <View key={pkg.id} style={styles.packageCard}>
+            {Array.isArray(packages) && packages.map((pkg) => (
+              <View key={pkg.id || pkg._id} style={styles.packageCard}>
                 <Text style={styles.packageName}>{pkg.name}</Text>
                 <Text style={styles.packageTokens}>{pkg.token_amount}</Text>
                 <Text style={styles.packageUnit}>tokens</Text>
@@ -252,11 +253,11 @@ const ProfileScreen = () => {
               <History size={18} color="#a855f7" />
               <Text style={styles.historyTitle}>Transaction History</Text>
             </View>
-            {history.length === 0 ? (
+            {!Array.isArray(history) || history.length === 0 ? (
               <Text style={styles.emptyHistory}>No transactions</Text>
             ) : (
               history.map((tx) => (
-                <View key={tx.id} style={styles.historyItem}>
+                <View key={tx.id || tx._id} style={styles.historyItem}>
                   <View>
                     <Text style={styles.historyDate}>{new Date(tx.created_at).toLocaleDateString()}</Text>
                     <Text style={styles.historyDesc}>{tx.description}</Text>

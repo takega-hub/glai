@@ -29,8 +29,10 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response && error.response.status === 401) {
-      console.log("401 Unauthorized detected. Clearing auth and redirecting to login.");
-      useAuthStore.getState().clearAuth();
+      const url = error.config.url;
+      console.log(`401 Unauthorized at ${url}. Clearing auth.`);
+      // Вызываем logout из стора
+      useAuthStore.getState().logout();
     }
     return Promise.reject(error);
   }
