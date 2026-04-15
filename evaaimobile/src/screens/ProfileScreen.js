@@ -30,16 +30,15 @@ import {
   Smile,
   HelpCircle,
 } from "lucide-react-native";
-import { useAuthStore } from "../store/authStore";
+import { useAuthStore, forceLogout } from "../store/authStore";
 import { launchImageLibrary } from "react-native-image-picker";
 import userService from "../services/userService";
 import authService from "../services/authService";
 import chatService from "../services/chatService";
 
 const ProfileScreen = () => {
-  const { user, token, setAuth, logout } = useAuthStore();
+  const { user, token, setAuth } = useAuthStore();
   const [balance, setBalance] = useState(user?.tokens || 0);
-  const clearAuth = logout;
   const [isEditing, setIsEditing] = useState(false);
   const [displayName, setDisplayName] = useState(user?.display_name || "");
   const [about, setAbout] = useState(user?.about || "");
@@ -356,14 +355,27 @@ const ProfileScreen = () => {
 
         <TouchableOpacity
           style={styles.logoutButton}
-          onPress={async () => {
-            try {
-              await authService.logout();
-            } catch (error) {
-              console.error("Logout error", error);
-            } finally {
-              clearAuth();
-            }
+          onPress={() => {
+            Alert.alert(
+              "Logout",
+              "Are you sure you want to logout?",
+              [
+                { text: "Cancel", style: "cancel" },
+                {
+                  text: "Logout",
+                  style: "destructive",
+                  onPress: () => {
+                    console.log("ProfileScreen: Manual logout triggered via setState");
+                    useAuthStore.setState({
+                      token: null,
+                      user: null,
+                      isAuthenticated: false,
+                      _hasHydrated: true
+                    });
+                  }
+                }
+              ]
+            );
           }}
         >
           <Text style={styles.logoutText}>Logout</Text>

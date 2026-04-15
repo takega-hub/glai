@@ -13,6 +13,7 @@ import {
 import { Star, Heart, Flame, User as UserIcon } from "lucide-react-native";
 import characterService from "../services/characterService";
 import { useFavoritesStore } from "../store/favoritesStore";
+import { useAuthStore } from "../store/authStore";
 
 const { width } = Dimensions.get("window");
 const COLUMN_COUNT = 2;
@@ -32,7 +33,11 @@ const MainScreen = ({ navigation }) => {
   };
 
   useEffect(() => {
-    fetchCharacters();
+    // Небольшая задержка перед первым запросом, чтобы дать сессии установиться
+    const timer = setTimeout(() => {
+      fetchCharacters();
+    }, 500);
+    return () => clearTimeout(timer);
   }, []);
 
   const fetchCharacters = async () => {
@@ -56,6 +61,12 @@ const MainScreen = ({ navigation }) => {
     } catch (err) {
       console.error("Fetch characters error:", err);
       setError(err.message);
+
+      // Глобальный логаут при любой 401 ошибке
+      if (err.response?.status === 401 || err.message?.includes("401")) {
+        console.log("MainScreen detected 401. Force logout.");
+        useAuthStore.getState().logout();
+      }
     } finally {
       setLoading(false);
     }

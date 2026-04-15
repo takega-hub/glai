@@ -1,4 +1,4 @@
-import { useAuthStore } from "../store/authStore";
+import { useAuthStore, forceLogout } from "../store/authStore";
 
 const API_URL = "https://eva.midoma.ru/api";
 
@@ -35,7 +35,7 @@ const login = async (email, password) => {
 
 const loginAsGuest = async () => {
   try {
-    const response = await fetch(`${API_URL}/auth/guest/`, {
+    const response = await fetch(`${API_URL}/auth/guest`, {
       method: "POST",
       headers: {
         Accept: "application/json",
@@ -60,7 +60,7 @@ const loginAsGuest = async () => {
 
 const register = async (email, password, displayName) => {
   try {
-    const response = await fetch(`${API_URL}/auth/register/`, {
+    const response = await fetch(`${API_URL}/auth/register`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -88,22 +88,30 @@ const register = async (email, password, displayName) => {
 
 const socialLogin = async (provider, token) => {
   try {
-    const response = await fetch(`${API_URL}/auth/${provider}/`, {
+    const body = provider === 'google'
+      ? { id_token: token }
+      : { identity_token: token };
+
+    console.log(`Social Login (${provider}): Sending token to server...`);
+
+    const response = await fetch(`${API_URL}/auth/${provider}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
       },
-      body: JSON.stringify({ token }),
+      body: JSON.stringify(body),
     });
 
     const data = await response.json();
 
     if (!response.ok) {
+      console.error(`${provider} login failed server-side:`, data);
       throw new Error(data.detail || `${provider} login failed`);
     }
 
     if (data.access_token) {
+      console.log(`${provider} login success. Received access_token.`);
       useAuthStore.getState().setAuth(data.access_token, data.user || null);
     }
     return data;
@@ -114,7 +122,8 @@ const socialLogin = async (provider, token) => {
 };
 
 const logout = async () => {
-  useAuthStore.getState().logout();
+  console.log("authService: performing logout...");
+  forceLogout();
 };
 
 const getCurrentUser = () => {

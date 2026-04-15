@@ -28,8 +28,6 @@ const LoginScreen = ({ navigation }) => {
     GoogleSignin.configure({
       webClientId: "915322282890-icdovedtf3n5rvl4ues81l205qcb3mhu.apps.googleusercontent.com",
       scopes: ["profile", "email"],
-      offlineAccess: true,
-      forceCodeForRefreshToken: true,
     });
   }, []);
 

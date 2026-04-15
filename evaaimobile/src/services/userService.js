@@ -1,8 +1,9 @@
 import apiClient from "./apiClient";
+import { Platform } from "react-native";
 
 const getUserProfile = async () => {
   try {
-    const response = await apiClient.get("/user/profile/");
+    const response = await apiClient.get("/user/profile");
     return response.data;
   } catch (error) {
     console.error("Failed to get user profile:", error.response?.data || error.message);
@@ -12,7 +13,7 @@ const getUserProfile = async () => {
 
 const updateUserProfile = async (profileData) => {
   try {
-    const response = await apiClient.put("/user/profile/", profileData);
+    const response = await apiClient.put("/user/profile", profileData);
     return response.data;
   } catch (error) {
     console.error("Failed to update user profile:", error.response?.data || error.message);
@@ -29,7 +30,7 @@ const uploadAvatar = async (fileUri) => {
       type: "image/jpeg",
     });
 
-    const response = await apiClient.post("/user/profile/avatar/", formData, {
+    const response = await apiClient.post("/user/profile/avatar", formData, {
       headers: {
         "Content-Type": "multipart/form-data",
       },
@@ -43,7 +44,7 @@ const uploadAvatar = async (fileUri) => {
 
 const getHistory = async () => {
   try {
-    const response = await apiClient.get("/tokens/history/");
+    const response = await apiClient.get("/tokens/history");
     return response.data;
   } catch (error) {
     console.error("Failed to get token history:", error.response?.data || error.message);
@@ -53,7 +54,7 @@ const getHistory = async () => {
 
 const getPackages = async () => {
   try {
-    const response = await apiClient.get("/tokens/packages/");
+    const response = await apiClient.get("/tokens/packages");
     return response.data;
   } catch (error) {
     console.error("Failed to get token packages:", error.response?.data || error.message);
@@ -63,7 +64,7 @@ const getPackages = async () => {
 
 const updateEmailNotifications = async (enabled) => {
   try {
-    const response = await apiClient.put("/profile/notifications/", { enabled });
+    const response = await apiClient.put("/profile/notifications", { enabled });
     return response.data;
   } catch (error) {
     console.error("Failed to update email notifications:", error.response?.data || error.message);
@@ -74,12 +75,25 @@ const updateEmailNotifications = async (enabled) => {
 const changePassword = async (currentPassword, newPassword) => {
   try {
     const response = await apiClient.put(
-      "/profile/change-password/",
+      "/profile/change-password",
       { current_password: currentPassword, new_password: newPassword }
     );
     return response.data;
   } catch (error) {
     console.error("Failed to change password:", error.response?.data || error.message);
+    throw error;
+  }
+};
+
+const registerDevice = async (deviceToken) => {
+  try {
+    const response = await apiClient.post("/notifications/register-device", {
+      device_token: deviceToken,
+      device_type: Platform.OS,
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Failed to register device:", error.response?.data || error.message);
     throw error;
   }
 };
@@ -92,4 +106,5 @@ export default {
   getPackages,
   updateEmailNotifications,
   changePassword,
+  registerDevice,
 };

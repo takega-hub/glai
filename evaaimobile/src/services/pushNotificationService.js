@@ -4,17 +4,13 @@ import apiClient from "./apiClient";
 import { Platform, Alert } from "react-native";
 
 class PushNotificationService {
-  // Безопасное получение объекта messaging
   getMessaging() {
     try {
-      // В RN Firebase 15+ проверка идет через firebase.apps.length
       if (firebase.apps && firebase.apps.length > 0) {
         return messaging();
       }
-      console.log("Firebase: No apps initialized yet.");
       return null;
     } catch (error) {
-      console.log("Firebase: Messaging not available", error);
       return null;
     }
   }
@@ -44,7 +40,6 @@ class PushNotificationService {
     try {
       const fcmToken = await msg.getToken();
       if (fcmToken) {
-        console.log("FCM Token:", fcmToken);
         await this.sendTokenToServer(fcmToken);
       }
     } catch (error) {
@@ -54,13 +49,17 @@ class PushNotificationService {
 
   async sendTokenToServer(token) {
     try {
+      // Ждем 2 секунды, чтобы сервер успел обновить сессию после логина
+      console.log("PushNotificationService: Waiting 2s before registering token...");
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
       await apiClient.post("/notifications/register-device", {
         device_token: token,
-        device_type: Platform.OS, // 'android' or 'ios'
-      });
+        device_type: Platform.OS,
+      }, { skipAuthError: true });
       console.log("Push token registered successfully");
     } catch (error) {
-      console.error("API error registering push token:", error.response?.data || error.message);
+      console.log("Push token registration failed (ignored):", error.message);
     }
   }
 

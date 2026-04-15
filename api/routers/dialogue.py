@@ -9,6 +9,7 @@ from api.database.connection import get_db
 from api.services.ai_dialogue_v2 import AIDialogueEngine
 from api.services.comfy_service import ComfyService
 from api.tasks import _unlock_photo_in_db
+from api.services.notification_service import notification_service
 
 from pydantic import BaseModel
 from enum import Enum
@@ -65,6 +66,7 @@ router = APIRouter()
 @router.post("/dialogue/send-message", response_model=MessageResponse)
 async def send_message(
     request: MessageRequest,
+    background_tasks: BackgroundTasks,
     current_user=Depends(get_current_user),
     db=Depends(get_db),
     dialogue_engine: AIDialogueEngine = Depends(lambda db=Depends(get_db): AIDialogueEngine(db))
@@ -165,6 +167,19 @@ async def send_message(
         
         # 5. Decrement tokens (only once per user message)
         await connection.execute("UPDATE users SET tokens = tokens - 1 WHERE id = $1", current_user["user_id"])
+
+        # 6. Send push notification in background
+        background_tasks.add_task(
+            notification_service.send_push_notification,
+            db,
+            str(current_user["user_id"]),
+            title=character["display_name"] or character["name"],
+            body=response_data["response"],
+            data={
+                "character_id": str(request.character_id),
+                "type": "new_message"
+            }
+        )
 
     return MessageResponse(
         response=response_data.get("response", ""),
