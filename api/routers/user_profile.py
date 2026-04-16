@@ -112,7 +112,8 @@ async def upload_avatar(
         )
 
     # Update the user's profile with the new avatar URL
-    avatar_url = f"/{file_path}"
+    # Используем прямые слеши для URL независимо от ОС
+    avatar_url = f"/uploads/avatars/{filename}"
     update_query = """
     UPDATE user_profiles
     SET avatar_url = $2, updated_at = NOW()

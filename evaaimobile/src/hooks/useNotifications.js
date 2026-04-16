@@ -3,9 +3,22 @@ import { Platform, PermissionsAndroid } from 'react-native';
 import messaging from '@react-native-firebase/messaging';
 import userService from '../services/userService';
 import { useAuthStore } from '../store/authStore';
+import { navigationRef } from '../navigation/RootNavigator';
 
 export const useNotifications = () => {
   const { isAuthenticated } = useAuthStore();
+
+  const handleNotification = (remoteMessage) => {
+    if (remoteMessage && remoteMessage.data && remoteMessage.data.character_id) {
+      const { character_id, character_name } = remoteMessage.data;
+      if (navigationRef.current) {
+        navigationRef.current.navigate('Chat', {
+          characterId: character_id,
+          characterName: character_name || 'Character'
+        });
+      }
+    }
+  };
 
   const requestUserPermission = async () => {
     if (Platform.OS === 'android' && Platform.Version >= 33) {
@@ -47,17 +60,31 @@ export const useNotifications = () => {
       setupNotifications();
 
       // Слушатель сообщений, когда приложение открыто
-      const unsubscribe = messaging().onMessage(async remoteMessage => {
+      const unsubscribeOnMessage = messaging().onMessage(async remoteMessage => {
         console.log('A new FCM message arrived!', JSON.stringify(remoteMessage));
         // Здесь можно показать локальное уведомление, если нужно
       });
 
       // Слушатель нажатия на уведомление, когда приложение в фоне
-      messaging().onNotificationOpenedApp(remoteMessage => {
+      const unsubscribeOnNotificationOpenedApp = messaging().onNotificationOpenedApp(remoteMessage => {
         console.log('Notification caused app to open from background state:', remoteMessage.notification);
+        handleNotification(remoteMessage);
       });
 
-      return unsubscribe;
+      // Проверка на уведомление, которое открыло приложение из закрытого состояния
+      messaging()
+        .getInitialNotification()
+        .then(remoteMessage => {
+          if (remoteMessage) {
+            console.log('Notification caused app to open from quit state:', remoteMessage.notification);
+            handleNotification(remoteMessage);
+          }
+        });
+
+      return () => {
+        unsubscribeOnMessage();
+        unsubscribeOnNotificationOpenedApp();
+      };
     }
   }, [isAuthenticated]);
 };

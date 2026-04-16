@@ -10,8 +10,9 @@ import {
   SafeAreaView,
   Dimensions,
 } from "react-native";
-import { Star, Heart, Flame, User as UserIcon } from "lucide-react-native";
+import { Star, Heart, Flame, User as UserIcon, MessageCircle } from "lucide-react-native";
 import characterService from "../services/characterService";
+import userService from "../services/userService";
 import { useFavoritesStore } from "../store/favoritesStore";
 import { useAuthStore } from "../store/authStore";
 
@@ -22,6 +23,7 @@ const CARD_WIDTH = (width - 32 - CARD_MARGIN * 2) / COLUMN_COUNT;
 
 const MainScreen = ({ navigation }) => {
   const [characters, setCharacters] = useState([]);
+  const [unreadStatus, setUnreadStatus] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const { toggleFavorite, isFavorite } = useFavoritesStore();
@@ -36,9 +38,33 @@ const MainScreen = ({ navigation }) => {
     // Небольшая задержка перед первым запросом, чтобы дать сессии установиться
     const timer = setTimeout(() => {
       fetchCharacters();
+      fetchUnreadStatus();
     }, 500);
-    return () => clearTimeout(timer);
-  }, []);
+
+    const unsubscribe = navigation.addListener('focus', () => {
+      fetchUnreadStatus();
+    });
+
+    return () => {
+      clearTimeout(timer);
+      unsubscribe();
+    };
+  }, [navigation]);
+
+  const fetchUnreadStatus = async () => {
+    try {
+      const statusArray = await userService.getUnreadStatus();
+      const statusMap = {};
+      if (Array.isArray(statusArray)) {
+        statusArray.forEach(item => {
+          statusMap[item.character_id.toString()] = item.has_unread;
+        });
+      }
+      setUnreadStatus(statusMap);
+    } catch (err) {
+      console.error("Fetch unread status error:", err);
+    }
+  };
 
   const fetchCharacters = async () => {
     try {
@@ -76,6 +102,7 @@ const MainScreen = ({ navigation }) => {
     const charId = item.id || item._id;
     const trustPercentage = Math.min(Math.round((item.trust_score || 0) / 10), 100);
     const favorite = isFavorite(charId);
+    const hasUnread = unreadStatus[charId?.toString()] === true;
 
     return (
       <TouchableOpacity
@@ -103,9 +130,16 @@ const MainScreen = ({ navigation }) => {
               </View>
             )}
 
+            {/* Unread Badge */}
+            {hasUnread && (
+              <View style={styles.unreadBadge}>
+                <MessageCircle size={16} color="white" fill="#22c55e" />
+              </View>
+            )}
+
             {/* Hot Badge */}
             {item.is_hot && (
-              <View style={styles.hotBadge}>
+              <View style={[styles.hotBadge, hasUnread && { top: 40 }]}>
                 <Flame size={16} color="white" />
               </View>
             )}
@@ -262,6 +296,15 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(168, 85, 247, 0.2)", // matches web gradient feel
     justifyContent: "center",
     alignItems: "center",
+  },
+  unreadBadge: {
+    position: "absolute",
+    top: 8,
+    left: 8,
+    backgroundColor: "rgba(34, 197, 94, 0.9)",
+    padding: 4,
+    borderRadius: 8,
+    zIndex: 10,
   },
   hotBadge: {
     position: "absolute",

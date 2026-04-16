@@ -16,6 +16,15 @@ export const useAuthStore = create(
           balance: newBalance,
           user: state.user ? { ...state.user, tokens: newBalance } : null,
         })),
+      forceLogout: () => {
+        console.log("authStore: forceLogout action triggered");
+        set({
+          token: null,
+          user: null,
+          balance: 0,
+          _hasHydrated: true
+        });
+      },
     }),
     {
       name: "auth-storage",

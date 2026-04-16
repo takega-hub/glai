@@ -1,11 +1,12 @@
-import React, { useEffect } from "react";
+import React, { useEffect, createRef } from "react";
 import { View, ActivityIndicator, Text, TouchableOpacity } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { Heart, User } from "lucide-react-native";
-import { useAuthStore, forceLogout } from "../store/authStore";
+import { useAuthStore } from "../store/authStore";
 import { useNotifications } from "../hooks/useNotifications";
 import apiClient from "../services/apiClient";
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
 
 import LoginScreen from "../screens/LoginScreen";
 import MainScreen from "../screens/MainScreen";
@@ -16,12 +17,22 @@ import FavoritesScreen from "../screens/FavoritesScreen";
 
 const Stack = createNativeStackNavigator();
 
+export const navigationRef = createRef();
+
 const RootNavigator = () => {
   const token = useAuthStore(state => state.token);
   const hydrated = useAuthStore(state => state._hasHydrated);
 
   // Initialize notifications
   useNotifications();
+
+  useEffect(() => {
+    GoogleSignin.configure({
+      webClientId: "915322282890-icdovedtf3n5rvl4ues81l205qcb3mhu.apps.googleusercontent.com",
+      scopes: ["profile", "email"],
+    });
+    console.log("RootNavigator: Google Sign-In configured");
+  }, []);
 
   useEffect(() => {
     console.log("RootNavigator Status: hydrated =", hydrated, "hasToken =", !!token);
@@ -43,7 +54,7 @@ const RootNavigator = () => {
         .catch(err => {
           if (err.response?.status === 401) {
             console.log("RootNavigator: 401 on /auth/me, forcing logout");
-            forceLogout();
+            useAuthStore.getState().forceLogout();
           }
         });
     }
@@ -52,7 +63,7 @@ const RootNavigator = () => {
   // Вместо early return мы всегда рендерим NavigationContainer,
   // но внутри него показываем либо загрузку, либо основные экраны.
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       {!hydrated ? (
         <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#0f172a" }}>
           <ActivityIndicator size="large" color="#a855f7" />

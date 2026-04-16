@@ -30,14 +30,23 @@ import {
   Smile,
   HelpCircle,
 } from "lucide-react-native";
-import { useAuthStore, forceLogout } from "../store/authStore";
+import { useAuthStore } from "../store/authStore";
 import { launchImageLibrary } from "react-native-image-picker";
 import userService from "../services/userService";
 import authService from "../services/authService";
 import chatService from "../services/chatService";
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
 
 const ProfileScreen = () => {
   const { user, token, setAuth } = useAuthStore();
+
+  const getAvatarUri = (url) => {
+    if (!url) return null;
+    if (url.startsWith("http")) return url;
+    const baseUrl = "https://eva.midoma.ru";
+    return `${baseUrl}${url.startsWith("/") ? "" : "/"}${url}`;
+  };
+
   const [balance, setBalance] = useState(user?.tokens || 0);
   const [isEditing, setIsEditing] = useState(false);
   const [displayName, setDisplayName] = useState(user?.display_name || "");
@@ -178,7 +187,7 @@ const ProfileScreen = () => {
             >
               <View style={styles.avatarGradient}>
                 {user.avatar_url ? (
-                  <Image source={{ uri: user.avatar_url }} style={styles.avatarImage} />
+                  <Image source={{ uri: getAvatarUri(user.avatar_url) }} style={styles.avatarImage} />
                 ) : (
                   <User size={48} color="white" />
                 )}
@@ -364,14 +373,23 @@ const ProfileScreen = () => {
                 {
                   text: "Logout",
                   style: "destructive",
-                  onPress: () => {
-                    console.log("ProfileScreen: Manual logout triggered via setState");
-                    useAuthStore.setState({
-                      token: null,
-                      user: null,
-                      isAuthenticated: false,
-                      _hasHydrated: true
-                    });
+                  onPress: async () => {
+                    console.log("ProfileScreen: Manual logout triggered");
+                    try {
+                      // Проверяем статус входа перед выходом
+                      const isSignedIn = await GoogleSignin.isSignedIn();
+                      console.log("ProfileScreen: Google isSignedIn before logout:", isSignedIn);
+
+                      if (isSignedIn) {
+                        await GoogleSignin.signOut();
+                        console.log("ProfileScreen: Google signed out successfully");
+                      }
+                    } catch (error) {
+                      console.error("ProfileScreen: Google SignOut Error:", error);
+                    }
+
+                    // Используем метод из стора
+                    useAuthStore.getState().forceLogout();
                   }
                 }
               ]

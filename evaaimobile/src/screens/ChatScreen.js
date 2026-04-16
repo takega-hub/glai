@@ -14,7 +14,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { launchImageLibrary } from "react-native-image-picker";
 import { useAuthStore } from "../store/authStore";
 import chatService from "../services/chatService";
-import { Gift as GiftIcon, Send as SendIcon, Plus } from "lucide-react-native";
+import userService from "../services/userService";
+import { Gift as GiftIcon, Send as SendIcon, Plus, BellOff, Bell } from "lucide-react-native";
 import GiftModal from "../components/GiftModal";
 
 const ChatScreen = ({ route, navigation }) => {
@@ -33,14 +34,46 @@ const ChatScreen = ({ route, navigation }) => {
   const [loading, setLoading] = useState(true);
   const [isTyping, setIsTyping] = useState(false);
   const [isGiftModalOpen, setIsGiftModalOpen] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+
+  const toggleMute = async () => {
+    try {
+      const newMutedState = !isMuted;
+      await userService.updateCharacterNotifications(characterId, !newMutedState);
+      setIsMuted(newMutedState);
+      Alert.alert(
+        newMutedState ? "Notifications Muted" : "Notifications Unmuted",
+        `You will ${newMutedState ? "no longer" : "now"} receive re-engagement messages from ${characterName}.`
+      );
+    } catch (error) {
+      console.error("Failed to toggle mute:", error);
+      Alert.alert("Error", "Could not update notification settings.");
+    }
+  };
 
   useEffect(() => {
     navigation.setOptions({
       title: characterName,
       headerStyle: { backgroundColor: "#1e1b4b" },
       headerTintColor: "#fff",
+      headerRight: () => (
+        <TouchableOpacity onPress={toggleMute} style={{ marginRight: 10 }}>
+          {isMuted ? <BellOff size={24} color="#f87171" /> : <Bell size={24} color="#fff" />}
+        </TouchableOpacity>
+      ),
     });
-  }, [characterName, navigation]);
+  }, [characterName, navigation, isMuted]);
+
+  useEffect(() => {
+    const markAsViewed = async () => {
+      try {
+        await userService.markCharacterViewed(characterId);
+      } catch (error) {
+        console.error("Failed to mark character viewed:", error);
+      }
+    };
+    markAsViewed();
+  }, [characterId]);
 
   const formatHistory = useCallback((history) => {
     const getFullImageUrl = (url) => {

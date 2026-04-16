@@ -64,10 +64,40 @@ const getPackages = async () => {
 
 const updateEmailNotifications = async (enabled) => {
   try {
-    const response = await apiClient.put("/profile/notifications", { enabled });
+    const response = await apiClient.put("/user/profile/notifications", { enabled });
     return response.data;
   } catch (error) {
     console.error("Failed to update email notifications:", error.response?.data || error.message);
+    throw error;
+  }
+};
+
+const getUnreadStatus = async () => {
+  try {
+    const response = await apiClient.get("/admin/user-state/unread-status");
+    return response.data;
+  } catch (error) {
+    console.error("Failed to get unread status:", error.response?.data || error.message);
+    throw error;
+  }
+};
+
+const markCharacterViewed = async (characterId) => {
+  try {
+    const response = await apiClient.post(`/admin/user-state/mark-viewed?character_id=${characterId}`);
+    return response.data;
+  } catch (error) {
+    console.error("Failed to mark character viewed:", error.response?.data || error.message);
+    throw error;
+  }
+};
+
+const updateCharacterNotifications = async (characterId, enabled) => {
+  try {
+    const response = await apiClient.put(`/admin/user-state/notifications/${characterId}`, { enabled });
+    return response.data;
+  } catch (error) {
+    console.error("Failed to update character notifications:", error.response?.data || error.message);
     throw error;
   }
 };
@@ -107,4 +137,7 @@ export default {
   updateEmailNotifications,
   changePassword,
   registerDevice,
+  getUnreadStatus,
+  markCharacterViewed,
+  updateCharacterNotifications,
 };
