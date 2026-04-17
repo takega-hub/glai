@@ -3,14 +3,20 @@ from typing import List, Optional
 from pydantic import BaseModel
 import uuid
 
-from api.auth.security import get_current_user
+from api.auth.security import get_current_user, get_current_admin_user
 from api.database.connection import get_db
+from api.services.notification_service import notification_service
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
 class DeviceRegistrationRequest(BaseModel):
     device_token: str
     device_type: str # 'ios' or 'android'
+
+class TestNotificationRequest(BaseModel):
+    user_id: str
+    title: str = "Test Notification"
+    body: str = "This is a test push notification"
 
 
 
@@ -61,7 +67,6 @@ async def register_device(
     user_id = current_user["user_id"]
     
     async with db.acquire() as connection:
-        # Upsert logic: update if token exists, otherwise insert.
         await connection.execute(
             """ 
             INSERT INTO user_devices (user_id, device_token, device_type, updated_at)
@@ -74,3 +79,18 @@ async def register_device(
         )
         
     return {"message": "Device registered successfully."}
+
+@router.post("/test-notification")
+async def test_notification(
+    request: TestNotificationRequest,
+    current_user=Depends(get_current_admin_user),
+    db=Depends(get_db)
+):
+    """Send a test push notification to a user (admin only)."""
+    await notification_service.send_push_notification(
+        db_connection=db,
+        user_id=request.user_id,
+        title=request.title,
+        body=request.body,
+    )
+    return {"message": "Test notification sent."}

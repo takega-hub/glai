@@ -32,7 +32,6 @@ class NotificationService:
         if not self.initialized:
             return
 
-        # Get device tokens from database
         devices = await db_connection.fetch(
             "SELECT device_token FROM user_devices WHERE user_id = $1",
             user_id
@@ -43,19 +42,27 @@ class NotificationService:
 
         tokens = [d["device_token"] for d in devices]
 
-        message = messaging.MulticastMessage(
-            notification=messaging.Notification(
-                title=title,
-                body=body,
-            ),
-            data=data or {},
-            tokens=tokens,
+        notification = messaging.Notification(
+            title=title,
+            body=body,
         )
 
-        try:
-            response = messaging.send_multicast(message)
-            print(f"Successfully sent {response.success_count} notifications; failures: {response.failure_count}")
-        except Exception as e:
-            print(f"Error sending push notification: {e}")
+        success_count = 0
+        failure_count = 0
+
+        for token in tokens:
+            try:
+                message = messaging.Message(
+                    notification=notification,
+                    data=data or {},
+                    token=token,
+                )
+                messaging.send(message)
+                success_count += 1
+            except Exception as e:
+                failure_count += 1
+                print(f"Error sending to token {token[:20]}...: {e}")
+
+        print(f"Successfully sent {success_count} notifications; failures: {failure_count}")
 
 notification_service = NotificationService()

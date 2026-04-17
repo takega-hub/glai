@@ -1,8 +1,9 @@
-import { useEffect } from 'react';
-import { Platform, PermissionsAndroid } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { Platform, PermissionsAndroid, Alert } from 'react-native';
 import messaging from '@react-native-firebase/messaging';
 import userService from '../services/userService';
 import { useAuthStore } from '../store/authStore';
+import { navigationRef } from '../navigation/RootNavigator';
 
 export const useNotifications = () => {
   const { isAuthenticated } = useAuthStore();
@@ -35,6 +36,21 @@ export const useNotifications = () => {
     }
   };
 
+  const handleNotificationTap = (remoteMessage) => {
+    const { data } = remoteMessage;
+    console.log('Notification tapped:', data);
+
+    if (data?.character_id && data?.type === 're_engagement') {
+      const nav = navigationRef.current;
+      if (nav) {
+        nav.navigate('Chat', {
+          characterId: data.character_id,
+          characterName: remoteMessage.notification?.title || 'Character',
+        });
+      }
+    }
+  };
+
   useEffect(() => {
     if (isAuthenticated) {
       const setupNotifications = async () => {
@@ -46,16 +62,30 @@ export const useNotifications = () => {
 
       setupNotifications();
 
-      // Слушатель сообщений, когда приложение открыто
       const unsubscribe = messaging().onMessage(async remoteMessage => {
         console.log('A new FCM message arrived!', JSON.stringify(remoteMessage));
-        // Здесь можно показать локальное уведомление, если нужно
+        Alert.alert(
+          remoteMessage.notification?.title || 'New Message',
+          remoteMessage.notification?.body || '',
+          [
+            { text: 'Ignore', style: 'cancel' },
+            {
+              text: 'Open',
+              onPress: () => handleNotificationTap(remoteMessage),
+            },
+          ]
+        );
       });
 
-      // Слушатель нажатия на уведомление, когда приложение в фоне
-      messaging().onNotificationOpenedApp(remoteMessage => {
-        console.log('Notification caused app to open from background state:', remoteMessage.notification);
-      });
+      messaging().onNotificationOpenedApp(handleNotificationTap);
+
+      const checkInitialNotification = async () => {
+        const initialNotification = await messaging().getInitialNotification();
+        if (initialNotification) {
+          handleNotificationTap(initialNotification);
+        }
+      };
+      checkInitialNotification();
 
       return unsubscribe;
     }

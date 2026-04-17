@@ -130,7 +130,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db=Depends(get
 async def get_current_user_info(current_user=Depends(get_current_user), db=Depends(get_db)):
     """Get current user information"""
     user = await db.fetchrow(
-        "SELECT id, email, role, created_at, tokens, trust_score FROM users WHERE id = $1",
+        "SELECT id, email, role, created_at, tokens FROM users WHERE id = $1",
         current_user["user_id"]
     )
     

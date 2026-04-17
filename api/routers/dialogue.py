@@ -9,7 +9,6 @@ from api.database.connection import get_db
 from api.services.ai_dialogue_v2 import AIDialogueEngine
 from api.services.comfy_service import ComfyService
 from api.tasks import _unlock_photo_in_db
-from api.services.notification_service import notification_service
 
 from pydantic import BaseModel
 from enum import Enum
@@ -159,27 +158,14 @@ async def send_message(
         trust_change = response_data.get("trust_score_change", 0)
         new_trust_score = min(user_state["trust_score"] + trust_change, 1000)
 
-        # 5. Save the fully updated history and trust score
+        # 5. Save the fully updated history and trust score and last_message_date
         await connection.execute(
-            "UPDATE user_character_state SET conversation_history = $1, trust_score = $2 WHERE user_id = $3 AND character_id = $4",
+            "UPDATE user_character_state SET conversation_history = $1, trust_score = $2, last_message_date = NOW() WHERE user_id = $3 AND character_id = $4",
             json.dumps(conversation_history), new_trust_score, current_user["user_id"], request.character_id
         )
         
         # 5. Decrement tokens (only once per user message)
         await connection.execute("UPDATE users SET tokens = tokens - 1 WHERE id = $1", current_user["user_id"])
-
-        # 6. Send push notification in background
-        background_tasks.add_task(
-            notification_service.send_push_notification,
-            db,
-            str(current_user["user_id"]),
-            title=character["display_name"] or character["name"],
-            body=response_data["response"],
-            data={
-                "character_id": str(request.character_id),
-                "type": "new_message"
-            }
-        )
 
     return MessageResponse(
         response=response_data.get("response", ""),
@@ -456,7 +442,7 @@ async def get_history(character_id: uuid.UUID, current_user=Depends(get_current_
         if not user_state:
             # Create new state if none exists
             await connection.execute(
-                "INSERT INTO user_character_state (user_id, character_id, trust_score, current_layer, conversation_history) VALUES ($1, $2, 0, 0, '[]')",
+                "INSERT INTO user_character_state (user_id, character_id, trust_score, current_layer, conversation_history, last_message_date) VALUES ($1, $2, 0, 0, '[]', NOW())",
                 current_user["user_id"], character_id
             )
             return HistoryResponse(

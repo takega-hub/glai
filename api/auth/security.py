@@ -30,6 +30,14 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     # if user is None:
     #     raise credentials_exception
     return {"user_id": user_id, "role": payload.get("role"), "user_name": payload.get("user_name")}
+
+async def get_current_admin_user(current_user: dict = Depends(get_current_user)):
+    if current_user.get("role") not in ["admin", "super_admin"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Admin access required"
+        )
+    return current_user
 def role_required(required_role: str):
     def role_checker(current_user: dict = Depends(get_current_user)):
         if current_user["role"] != required_role:

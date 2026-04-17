@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, Eye, Edit, Trash2, ChevronLeft, ChevronRight, UserPlus } from 'lucide-react';
+import { Search, Eye, Edit, Trash2, ChevronLeft, ChevronRight, UserPlus, Bell } from 'lucide-react';
 import useAuthStore from '../store/useAuthStore';
 import { debounce } from 'lodash';
 import UserDetailsModal from '../components/users/UserDetailsModal';
@@ -181,12 +181,42 @@ const Users: React.FC = () => {
         throw new Error(errorData.detail || 'Failed to delete user');
       }
 
-      // Refresh the users list
       fetchUsers(currentPage, searchTerm);
       alert('User deleted successfully');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete user');
       console.error('Error deleting user:', err);
+    }
+  };
+
+  const handleTestPushNotification = async (userId: string) => {
+    if (!confirm('Send a test push notification to this user?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(new URL('/api/notifications/test-notification', window.location.origin).toString(), {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          user_id: userId,
+          title: 'Test Notification',
+          body: 'This is a test push notification from GL AI Admin',
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to send test notification');
+      }
+
+      alert('Test notification sent successfully!');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to send test notification');
+      console.error('Error sending test notification:', err);
     }
   };
 
@@ -303,6 +333,7 @@ const Users: React.FC = () => {
                   <div className="flex space-x-2">
                     <button onClick={() => handleViewUser(user.id)} className="text-indigo-600 hover:text-indigo-900" title="View User"><Eye className="w-4 h-4" /></button>
                     <button onClick={() => handleEditUser(user.id)} className="text-blue-600 hover:text-blue-900" title="Edit User"><Edit className="w-4 h-4" /></button>
+                    <button onClick={() => handleTestPushNotification(user.id)} className="text-green-600 hover:text-green-900" title="Test Push Notification"><Bell className="w-4 h-4" /></button>
                     <button onClick={() => handleDeleteUser(user.id)} className="text-red-600 hover:text-red-900" title="Delete User"><Trash2 className="w-4 h-4" /></button>
                   </div>
                 </td>

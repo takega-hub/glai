@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { launchImageLibrary } from "react-native-image-picker";
 import { useAuthStore } from "../store/authStore";
 import chatService from "../services/chatService";
+import userService from "../services/userService";
 import { Gift as GiftIcon, Send as SendIcon, Plus } from "lucide-react-native";
 import GiftModal from "../components/GiftModal";
 
@@ -40,7 +41,16 @@ const ChatScreen = ({ route, navigation }) => {
       headerStyle: { backgroundColor: "#1e1b4b" },
       headerTintColor: "#fff",
     });
-  }, [characterName, navigation]);
+    
+    const markAsViewed = async () => {
+      try {
+        await userService.markCharacterViewed(characterId);
+      } catch (err) {
+        console.error("Failed to mark character viewed:", err);
+      }
+    };
+    markAsViewed();
+  }, [characterId, characterName, navigation]);
 
   const formatHistory = useCallback((history) => {
     const getFullImageUrl = (url) => {

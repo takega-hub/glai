@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { View, ActivityIndicator, Text, TouchableOpacity } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
@@ -15,6 +15,7 @@ import ProfileScreen from "../screens/ProfileScreen";
 import FavoritesScreen from "../screens/FavoritesScreen";
 
 const Stack = createNativeStackNavigator();
+export const navigationRef = React.createRef();
 
 const RootNavigator = () => {
   const token = useAuthStore(state => state.token);
@@ -52,7 +53,7 @@ const RootNavigator = () => {
   // Вместо early return мы всегда рендерим NavigationContainer,
   // но внутри него показываем либо загрузку, либо основные экраны.
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       {!hydrated ? (
         <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#0f172a" }}>
           <ActivityIndicator size="large" color="#a855f7" />

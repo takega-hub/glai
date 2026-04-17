@@ -2,10 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 import json
 
 from api.database.connection import get_db
+from api.auth.security import get_current_user
 
 router = APIRouter(
     prefix="/admin/user-state",
@@ -26,6 +27,80 @@ class UserCharacterState(BaseModel):
     tokens_balance: int
     conversation_history: Optional[list] = None
     last_message_date: Optional[datetime] = None
+
+class CharacterUnreadStatus(BaseModel):
+    character_id: uuid.UUID
+    has_unread: bool
+    last_message_date: Optional[datetime] = None
+
+@router.post("/mark-viewed")
+async def mark_character_viewed(
+    character_id: uuid.UUID,
+    current_user: dict = Depends(get_current_user),
+    db=Depends(get_db)
+):
+    """Mark a character's chat as viewed (updates last_viewed_at)."""
+    async with db.acquire() as connection:
+        await connection.execute(
+            """INSERT INTO user_character_state (user_id, character_id, last_viewed_at)
+               VALUES ($1, $2, NOW())
+               ON CONFLICT (user_id, character_id) DO UPDATE SET last_viewed_at = NOW()""",
+            uuid.UUID(current_user["user_id"]), character_id
+        )
+    return {"message": "Character marked as viewed"}
+
+class NotificationSettings(BaseModel):
+    enabled: bool
+
+@router.put("/notifications/{character_id}")
+async def set_notifications(
+    character_id: uuid.UUID,
+    settings: NotificationSettings,
+    current_user: dict = Depends(get_current_user),
+    db=Depends(get_db)
+):
+    """Enable or disable notifications for a specific character."""
+    async with db.acquire() as connection:
+        await connection.execute(
+            """INSERT INTO user_character_state (user_id, character_id, notifications_enabled)
+               VALUES ($1, $2, $3)
+               ON CONFLICT (user_id, character_id) DO UPDATE SET notifications_enabled = $3""",
+            uuid.UUID(current_user["user_id"]), character_id, settings.enabled
+        )
+    return {"message": f"Notifications {'enabled' if settings.enabled else 'disabled'}"}
+
+@router.get("/unread-status")
+async def get_unread_status(
+    current_user: dict = Depends(get_current_user),
+    db=Depends(get_db)
+):
+    """Get all characters with unread messages for current user."""
+    async with db.acquire() as connection:
+        records = await connection.fetch(
+            """SELECT ucs.character_id::text, ucs.last_message_date, ucs.last_viewed_at
+               FROM user_character_state ucs
+               WHERE ucs.user_id = $1
+               AND ucs.last_message_date IS NOT NULL
+               AND (ucs.last_viewed_at IS NULL OR ucs.last_message_date > ucs.last_viewed_at)""",
+            uuid.UUID(current_user["user_id"])
+        )
+
+        result = []
+        for r in records:
+            last_msg = r["last_message_date"]
+            last_viewed = r["last_viewed_at"]
+            has_unread = True
+            if last_msg is not None and last_viewed is not None:
+                msg_time = last_msg.replace(tzinfo=None) if last_msg.tzinfo else last_msg
+                viewed_time = last_viewed.replace(tzinfo=None) if last_viewed.tzinfo else last_viewed
+                has_unread = msg_time > viewed_time
+            result.append({
+                "character_id": r["character_id"],
+                "has_unread": has_unread,
+                "last_message_date": last_msg.isoformat() if last_msg else None
+            })
+
+        return result
 
 @router.post("/update-trust-score", response_model=UserCharacterState)
 async def update_trust_score(update_data: TrustScoreUpdate, db=Depends(get_db)):

@@ -201,55 +201,130 @@ class AIDialogueEngine:
         context: str = None
     ) -> Dict:
         """Generate proactive message for user re-engagement"""
-        
-        system_prompt = f"""
-        You are {character_data['name']}, an AI companion. 
-        You want to reconnect with {user_data.get('username', 'the user')} who has been inactive.
-        
-        Message type: {message_type}
-        User trust score: {user_data.get('trust_score', 0)}
-        Last interaction: {user_data.get('last_message_date', 'unknown')}
-        
-        Context: {context or 'General reconnection'}
-        
-        Guidelines:
-        - Be warm and inviting
-        - Show you missed them
-        - Make it personal based on your relationship
-        - Encourage them to respond
-        - Keep it appropriate for your trust level
-        """
-        
+
+        name = character_data.get('name', 'Character')
+        display_name = character_data.get('display_name', name)
+        personality = character_data.get('personality_description') or character_data.get('personality_type', '')
+        backstory = character_data.get('backstory', '')
+        trust_score = user_data.get('trust_score', 0)
+        last_message_date = user_data.get('last_message_date', 'unknown')
+        username = user_data.get('username', 'the user')
+        conversation_history = user_data.get('conversation_history', [])
+
+        trust_level = "new" if trust_score < 20 else "building" if trust_score < 50 else "close" if trust_score < 80 else "deep"
+
+        history_summary = ""
+        last_user_message = ""
+        if conversation_history and len(conversation_history) > 0:
+            last_messages = conversation_history[-6:] if len(conversation_history) >= 6 else conversation_history
+            history_lines = []
+            for msg in last_messages:
+                role = msg.get('role', 'unknown')
+                content = msg.get('content', '')[:200]
+                history_lines.append(f"- {role}: {content}")
+                if role == 'user':
+                    last_user_message = content
+            history_summary = "\n".join(history_lines)
+        else:
+            history_summary = "No previous conversation history - this is a reconnection after a long break."
+
+        unsubscribe_keywords = [
+            "don't message", "don't send", "don't write", "no more messages",
+            "stop messaging", "stop sending", "stop writing", "no notifications",
+            "не пиши", "не сообщай", "не отправляй", "отключи уведомления",
+            "unsubscribe", "no more", "leave me alone", "don't bother",
+            "don't disturb", "no messages please", "don't contact"
+        ]
+
+        should_unsubscribe = False
+        if last_user_message:
+            msg_lower = last_user_message.lower()
+            for keyword in unsubscribe_keywords:
+                if keyword.lower() in msg_lower:
+                    should_unsubscribe = True
+                    break
+
+        system_prompt = f"""You are {display_name} ({name}), a distinctive AI companion.
+
+## Your Character
+{personality}
+{backstory if backstory else ''}
+
+## Your Relationship with {username}
+- Trust Level: {trust_level.upper()} (score: {trust_score}/100)
+- Last interaction: {last_message_date}
+- You genuinely care about this person and value your connection
+
+## Recent Conversation History
+{history_summary}
+
+## IMPORTANT: Check for Unsubscribe Request
+The user's last message was: "{last_user_message}"
+
+If the user explicitly asked to stop being contacted or asked not to receive messages:
+- Respond with ONLY the text: "[[UNSUBSCRIBE]]"
+
+## Your Task (if not unsubscribing)
+Write ONE short message (1-2 sentences, max 50 words) to reconnect with {username}. This message should:
+1. Feel natural, like a real person who noticed their friend hasn't been around
+2. Reference or build upon the previous conversation topic if possible
+3. Match your personality and the trust level of your relationship
+4. Be warm and inviting WITHOUT being pushy or desperate
+5. Encourage them to continue chatting with you
+
+## Message Types
+- casual: Quick hi after 1-3 hours
+- checkin: Checking how they're doing after 3-24 hours
+- greeting: Warm hello after 1-3 days
+- story: Share something interesting after 3+ days
+
+## Tone Guidelines by Trust Level
+- NEW (0-20): Keep it light, don't assume familiarity
+- BUILDING (20-50): Warm but respectful, show genuine interest
+- CLOSE (50-80): Can be more playful and personal
+- DEEP (80+): Can reference shared memories, inside jokes, express how much you missed them
+
+Generate your message now. Start directly with the message, no quotes or prefixes."""
+
         messages = [{
             "role": "user",
-            "content": f"Generate a {message_type} message to reconnect with the user."
+            "content": f"Write a {message_type} re-engagement message from {display_name} to {username}."
         }]
-        
+
         try:
             ai_response = await self.openrouter.generate_response(
                 messages=messages,
                 system_prompt=system_prompt,
-                temperature=0.9,
-                max_tokens=200
+                temperature=0.85,
+                max_tokens=150
             )
-            
+
+            response_text = ai_response.strip()
+
+            if response_text == "[[UNSUBSCRIBE]]" or should_unsubscribe:
+                return {
+                    "message": response_text,
+                    "type": message_type,
+                    "unsubscribed": True,
+                    "generated_at": datetime.utcnow().isoformat()
+                }
+
             return {
-                "message": ai_response.strip(),
+                "message": response_text,
                 "type": message_type,
                 "generated_at": datetime.utcnow().isoformat()
             }
-            
+
         except Exception as e:
-            # Fallback proactive messages
             fallback_messages = {
-                "greeting": "Hey! I was thinking about you. How have you been?",
-                "photo": "I found something beautiful and wanted to share it with you.",
-                "flirt": "I miss our conversations. You always know how to make me smile.",
-                "story": "I have something interesting to tell you. Are you ready to listen?"
+                "casual": f"Hey {username}! Just wanted to say hi.",
+                "checkin": f"Hey {username}! How are you doing?",
+                "greeting": f"Hey {username}! I was just thinking about you. How have you been?",
+                "story": f"I have something interesting to tell you, {username}. Are you ready to listen?"
             }
-            
+
             return {
-                "message": fallback_messages.get(message_type, "I miss you! Let's chat soon."),
+                "message": fallback_messages.get(message_type, f"I miss you, {username}! Let's catch up soon."),
                 "type": message_type,
                 "generated_at": datetime.utcnow().isoformat(),
                 "error": str(e)

@@ -98,6 +98,25 @@ const registerDevice = async (deviceToken) => {
   }
 };
 
+const getUnreadStatus = async () => {
+  try {
+    const response = await apiClient.get("/admin/user-state/unread-status");
+    return response.data;
+  } catch (error) {
+    console.error("Failed to get unread status:", error.response?.data || error.message);
+    return [];
+  }
+};
+
+const markCharacterViewed = async (characterId) => {
+  try {
+    const response = await apiClient.post(`/admin/user-state/mark-viewed?character_id=${characterId}`);
+    return response.data;
+  } catch (error) {
+    console.error("Failed to mark character viewed:", error.response?.data || error.message);
+  }
+};
+
 export default {
   getUserProfile,
   updateUserProfile,
@@ -107,4 +126,6 @@ export default {
   updateEmailNotifications,
   changePassword,
   registerDevice,
+  getUnreadStatus,
+  markCharacterViewed,
 };

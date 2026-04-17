@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -10,10 +10,11 @@ import {
   SafeAreaView,
   Dimensions,
 } from "react-native";
-import { Star, Heart, Flame, User as UserIcon } from "lucide-react-native";
+import { Star, Heart, Flame, User as UserIcon, MessageCircle } from "lucide-react-native";
 import characterService from "../services/characterService";
 import { useFavoritesStore } from "../store/favoritesStore";
 import { useAuthStore } from "../store/authStore";
+import userService from "../services/userService";
 
 const { width } = Dimensions.get("window");
 const COLUMN_COUNT = 2;
@@ -24,6 +25,7 @@ const MainScreen = ({ navigation }) => {
   const [characters, setCharacters] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [unreadStatus, setUnreadStatus] = useState({});
   const { toggleFavorite, isFavorite } = useFavoritesStore();
 
   const getFullImageUrl = (url) => {
@@ -32,13 +34,32 @@ const MainScreen = ({ navigation }) => {
     return `https://eva.midoma.ru${url}`;
   };
 
+  const loadUnreadStatus = useCallback(async () => {
+    try {
+      const status = await userService.getUnreadStatus();
+      const statusMap = {};
+      status.forEach(s => {
+        statusMap[s.character_id?.toString()] = s.has_unread;
+      });
+      setUnreadStatus(statusMap);
+    } catch (err) {
+      console.error("Failed to load unread status:", err);
+    }
+  }, []);
+
   useEffect(() => {
-    // Небольшая задержка перед первым запросом, чтобы дать сессии установиться
     const timer = setTimeout(() => {
       fetchCharacters();
     }, 500);
     return () => clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      loadUnreadStatus();
+    });
+    return unsubscribe;
+  }, [navigation, loadUnreadStatus]);
 
   const fetchCharacters = async () => {
     try {
@@ -117,6 +138,13 @@ const MainScreen = ({ navigation }) => {
             >
               <Heart size={20} color={favorite ? "#ef4444" : "white"} fill={favorite ? "#ef4444" : "transparent"} />
             </TouchableOpacity>
+
+            {/* Unread Message Badge */}
+            {unreadStatus[charId?.toString()] && (
+              <View style={styles.unreadBadge}>
+                <MessageCircle size={16} color="white" />
+              </View>
+            )}
 
             {/* Gradient Overlay Placeholder (using semi-transparent view) */}
             <View style={styles.imageOverlay}>
@@ -283,6 +311,15 @@ const styles = StyleSheet.create({
   },
   favoriteButtonActive: {
     backgroundColor: "rgba(255, 255, 255, 0.9)",
+  },
+  unreadBadge: {
+    position: "absolute",
+    top: 8,
+    left: 8,
+    backgroundColor: "#22c55e",
+    padding: 4,
+    borderRadius: 12,
+    zIndex: 10,
   },
   imageOverlay: {
     position: "absolute",
